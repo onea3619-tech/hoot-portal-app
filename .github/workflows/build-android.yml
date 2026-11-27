@@ -8,6 +8,11 @@ on:
 permissions:
   contents: write
 
+# A newer push cancels the older build, so the release always has the latest code
+concurrency:
+  group: build-android
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
