@@ -22,7 +22,16 @@ for name in ("settings.gradle", "settings.gradle.kts"):
     if f.exists():
         s = f.read_text(encoding="utf-8")
         s = re.sub(r'(org\.jetbrains\.kotlin\.android"\)?\s*version\s*")[0-9.]+(")', r"\g<1>1.9.24\2", s)
+        # androidx.webkit needs AGP >= 8.1.1
+        s = re.sub(r'(com\.android\.application"\)?\s*version\s*")[0-9.]+(")', r"\g<1>8.3.2\2", s)
         f.write_text(s, encoding="utf-8")
+
+# AGP 8.3 needs Gradle 8.4+
+wrapper = root / "gradle/wrapper/gradle-wrapper.properties"
+if wrapper.exists():
+    w = wrapper.read_text(encoding="utf-8")
+    w = re.sub(r"gradle-[0-9.]+-(all|bin)\.zip", "gradle-8.7-all.zip", w)
+    wrapper.write_text(w, encoding="utf-8")
 
 # 3) minSdk 21 at least
 for name in ("app/build.gradle", "app/build.gradle.kts"):
