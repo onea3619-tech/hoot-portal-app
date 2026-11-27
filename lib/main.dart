@@ -4,7 +4,11 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'api.dart';
 import 'data.dart';
+import 'login.dart';
 import 'portal.dart';
 import 'screens.dart';
 import 'theme.dart';
@@ -12,11 +16,13 @@ import 'theme.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await AppConfig.load();
-  runApp(const HootApp());
+  final loggedIn = await api.restore();
+  runApp(HootApp(loggedIn: loggedIn));
 }
 
 class HootApp extends StatelessWidget {
-  const HootApp({super.key});
+  const HootApp({super.key, required this.loggedIn});
+  final bool loggedIn;
 
   @override
   Widget build(BuildContext context) {
@@ -31,7 +37,7 @@ class HootApp extends StatelessWidget {
         GlobalCupertinoLocalizations.delegate,
       ],
       theme: buildTheme(),
-      home: const Shell(),
+      home: loggedIn ? const Shell() : const LoginScreen(),
     );
   }
 }
@@ -52,8 +58,27 @@ class _ShellState extends State<Shell> {
   @override
   void initState() {
     super.initState();
+    tabIndex.value = 0;
+    _loadMeta();
     Connectivity().checkConnectivity().then(_onConn);
     _sub = Connectivity().onConnectivityChanged.listen(_onConn);
+  }
+
+  /// Pricelists and vendors from the quick order page, then the last
+  /// chosen pricelist is selected again.
+  Future<void> _loadMeta() async {
+    try {
+      await api.loadQuickOrderMeta();
+      final p = await SharedPreferences.getInstance();
+      final saved = p.getInt('pricelist_id');
+      if (saved != null && api.pricelists.any((e) => e.id == saved)) {
+        await cart.choosePricelist(saved);
+      }
+      metaVersion.value++;
+      if (mounted) setState(() {});
+    } catch (e) {
+      if (e is ApiException && e.auth && mounted) goToLogin(context);
+    }
   }
 
   void _onConn(List<ConnectivityResult> r) {
