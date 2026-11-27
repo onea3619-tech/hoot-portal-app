@@ -193,7 +193,10 @@ class OdooApi {
     final body = jsonDecode(utf8.decode(res.bodyBytes));
     if (body is Map && body['error'] != null) {
       final err = body['error'];
-      final name = (err is Map ? err['data']?['name'] : '')?.toString() ?? '';
+      var name = '';
+      if (err is Map && err['data'] is Map) {
+        name = ((err['data'] as Map)['name'] ?? '').toString();
+      }
       if (name.contains('SessionExpired') || name.contains('AccessDenied')) {
         throw ApiException('انتهت الجلسة، سجّل دخول من جديد', auth: true);
       }
