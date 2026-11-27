@@ -13,7 +13,7 @@ perms = (
 )
 if "android.permission.INTERNET" not in m:
     m = m.replace("<application", perms + "    <application", 1)
-m = re.sub(r'android:label="[^"]*"', 'android:label="الحوت"', m, count=1)
+m = re.sub(r'android:label="[^"]*"', 'android:label="Hoot drug store"', m, count=1)
 manifest.write_text(m, encoding="utf-8")
 
 # 2) Kotlin plugin version new enough for the camera/scanner plugins
