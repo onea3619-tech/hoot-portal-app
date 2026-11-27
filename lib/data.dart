@@ -159,3 +159,11 @@ final tabIndex = ValueNotifier<int>(0);
 final catalogQuery = ValueNotifier<String>('');
 
 String money(double v) => '${v.toStringAsFixed(2)} د.أ';
+
+/// Company contact numbers shown in the app.
+const kSupportPhone = '+962793888844';
+const kSupportPhoneDisplay = '07 9388 8844';
+/// WhatsApp number linked to Odoo's WhatsApp API (international, digits only).
+/// Empty = the WhatsApp button is hidden until the number is filled in.
+const kSupportWhatsapp = '';
+const kSupportWhatsappDisplay = '';

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'data.dart';
 import 'portal.dart';
@@ -24,6 +26,7 @@ class HomeScreen extends StatelessWidget {
     return CustomScrollView(slivers: [
       SliverToBoxAdapter(child: _Header()),
       SliverToBoxAdapter(child: _Offers()),
+      const SliverToBoxAdapter(child: _ScanTip()),
       const SliverToBoxAdapter(child: SectionTitle('الأقسام')),
       SliverToBoxAdapter(
         child: SizedBox(
@@ -135,6 +138,84 @@ class _Header extends StatelessWidget {
           ),
         ),
       ]),
+    );
+  }
+}
+
+/// Explains the barcode search to the pharmacist; can be hidden.
+class _ScanTip extends StatefulWidget {
+  const _ScanTip();
+
+  @override
+  State<_ScanTip> createState() => _ScanTipState();
+}
+
+class _ScanTipState extends State<_ScanTip> {
+  bool _hidden = false;
+
+  @override
+  void initState() {
+    super.initState();
+    SharedPreferences.getInstance().then((p) {
+      if (mounted && (p.getBool('tip_scan_hidden') ?? false)) setState(() => _hidden = true);
+    });
+  }
+
+  Future<void> _hide() async {
+    setState(() => _hidden = true);
+    final p = await SharedPreferences.getInstance();
+    await p.setBool('tip_scan_hidden', true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 300),
+      child: _hidden
+          ? const SizedBox(width: double.infinity)
+          : Container(
+              margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              padding: const EdgeInsets.fromLTRB(14, 14, 6, 14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: HootColors.green, width: 1.5),
+              ),
+              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(color: HootColors.green.withOpacity(0.18), borderRadius: BorderRadius.circular(14)),
+                  child: const Icon(Icons.qr_code_scanner_rounded, color: HootColors.greenDark, size: 30),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const Text('لاقي الصنف بالكاميرا', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15.5)),
+                    const SizedBox(height: 2),
+                    const Text(
+                      'بدل ما تكتب اسم الصنف: اضغط زر الكاميرا، ووجّهها على الباركود المطبوع على علبة الدواء، والتطبيق بيجيبلك الصنف فوراً لتضيفه للسلة.',
+                      style: TextStyle(fontSize: 12.5, color: HootColors.muted, height: 1.45),
+                    ),
+                    const SizedBox(height: 8),
+                    FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: HootColors.greenDark,
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                      ),
+                      onPressed: () => scanToCatalog(context),
+                      icon: const Icon(Icons.photo_camera_rounded, size: 18),
+                      label: const Text('جرّب هلق'),
+                    ),
+                  ]),
+                ),
+                IconButton(
+                  tooltip: 'إخفاء',
+                  onPressed: _hide,
+                  icon: const Icon(Icons.close_rounded, color: HootColors.muted, size: 20),
+                ),
+              ]),
+            ),
     );
   }
 }
@@ -711,6 +792,24 @@ class AccountScreen extends StatelessWidget {
         _tile(Icons.event_available_rounded, 'حجز زيارة مندوب', 'من البورتال', () => open('المواعيد', '/appointment')),
         _tile(Icons.language_rounded, 'البورتال الكامل', 'تسجيل الدخول وكل الخدمات', () => open('البورتال', '/my')),
         _tile(Icons.dns_rounded, 'إعدادات الخادم', 'Staging / Live', () => editServerDialog(context)),
+        const SizedBox(height: 8),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(4, 0, 4, 8),
+          child: Text('تواصل معنا', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+        ),
+        Row(children: [
+          Expanded(
+            child: _contactBtn(Icons.call_rounded, 'اتصال', kSupportPhoneDisplay, HootColors.blue,
+                () => launchUrl(Uri.parse('tel:$kSupportPhone'))),
+          ),
+          if (kSupportWhatsapp.isNotEmpty) ...[
+            const SizedBox(width: 10),
+            Expanded(
+              child: _contactBtn(Icons.chat_rounded, 'واتساب', kSupportWhatsappDisplay, const Color(0xFF25D366),
+                  () => launchUrl(Uri.parse('https://wa.me/$kSupportWhatsapp'), mode: LaunchMode.externalApplication)),
+            ),
+          ],
+        ]),
         const SizedBox(height: 12),
         Container(
           padding: const EdgeInsets.all(14),
@@ -726,6 +825,24 @@ class AccountScreen extends StatelessWidget {
       ]),
     );
   }
+
+  Widget _contactBtn(IconData icon, String title, String sub, Color color, VoidCallback onTap) => Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+            child: Column(children: [
+              CircleAvatar(radius: 22, backgroundColor: color, child: Icon(icon, color: Colors.white)),
+              const SizedBox(height: 8),
+              Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+              Text(sub, textDirection: TextDirection.ltr, style: const TextStyle(fontSize: 12, color: HootColors.muted)),
+            ]),
+          ),
+        ),
+      );
 
   Widget _tile(IconData icon, String title, String sub, VoidCallback onTap) => Padding(
         padding: const EdgeInsets.only(bottom: 10),
