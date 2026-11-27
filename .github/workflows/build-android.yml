@@ -5,6 +5,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -41,3 +44,15 @@ jobs:
         with:
           name: hoot-portal-apk
           path: build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Fixed download name
+        run: cp build/app/outputs/flutter-apk/app-release.apk hoot-alhoot.apk
+
+      # Stable link: /releases/latest/download/hoot-alhoot.apk
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: app-latest
+          name: "تطبيق الحوت - آخر نسخة"
+          body: "آخر نسخة تجريبية من تطبيق الحوت (Android). البناء رقم ${{ github.run_number }}."
+          files: hoot-alhoot.apk
+          make_latest: true
