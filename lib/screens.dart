@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -40,6 +41,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   List<Product>? _hot;
+  List<Product>? _fresh;
   bool _error = false;
   int? _pl;
 
@@ -64,8 +66,12 @@ class _HomeScreenState extends State<HomeScreen> {
     _pl = cart.pricelistId;
     try {
       final page = await api.cards(hot: true);
+      // "وصل حديثاً" is a placeholder for now: a slice of the catalog until
+      // Odoo marks newly received products.
+      final fresh = await api.cards(offset: 40);
       if (mounted) setState(() {
         _hot = page.items;
+        _fresh = fresh.items.take(10).toList();
         _error = false;
       });
     } catch (e) {
@@ -85,6 +91,8 @@ class _HomeScreenState extends State<HomeScreen> {
         const SliverToBoxAdapter(child: _PricelistBanner()),
         SliverToBoxAdapter(child: _Offers()),
         const SliverToBoxAdapter(child: _ScanTip()),
+        const SliverToBoxAdapter(child: SectionTitle('التصنيفات')),
+        const SliverToBoxAdapter(child: _CategoryStrip()),
         SliverToBoxAdapter(
           child: SectionTitle('الموردين', onMore: () {
             catalogQuery.value = '';
@@ -112,6 +120,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 )
               : _HorizontalProducts(_hot!),
         ),
+        if (_fresh != null && _fresh!.isNotEmpty) ...[
+          const SliverToBoxAdapter(child: SectionTitle('وصل حديثاً ✨')),
+          SliverToBoxAdapter(child: _HorizontalProducts(_fresh!)),
+        ],
         const SliverToBoxAdapter(child: SizedBox(height: 24)),
       ]),
     );
@@ -137,10 +149,17 @@ class _Header extends StatelessWidget {
               const Text('Hoot drug store', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900)),
             ]),
           ),
-          IconButton(
-            tooltip: 'واتساب',
-            onPressed: () => launchUrl(Uri.parse('https://wa.me/$kSupportWhatsapp'), mode: LaunchMode.externalApplication),
-            icon: const Icon(Icons.chat_rounded, color: Colors.white),
+          Material(
+            color: kWhatsappGreen,
+            shape: const CircleBorder(),
+            child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: openWhatsapp,
+              child: const Padding(
+                padding: EdgeInsets.all(9),
+                child: FaIcon(FontAwesomeIcons.whatsapp, color: Colors.white, size: 24),
+              ),
+            ),
           ),
         ]),
         const SizedBox(height: 14),
@@ -367,6 +386,82 @@ class _OffersState extends State<_Offers> {
   }
 }
 
+const kWhatsappGreen = Color(0xFF25D366);
+
+void openWhatsapp() =>
+    launchUrl(Uri.parse('https://wa.me/$kSupportWhatsapp'), mode: LaunchMode.externalApplication);
+
+/// Product classification shown in the app ("تصنيف التطبيق" on the product
+/// card in Odoo, plus Agent / Subagent).
+const appCategories = [
+  ('agent', 'وكالاتنا', Icons.verified_rounded, Color(0xFF2458BF)),
+  ('medicine', 'أدوية', Icons.medication_rounded, Color(0xFF1C47A8)),
+  ('supplement', 'مكملات غذائية', Icons.spa_rounded, Color(0xFF5E9A1E)),
+  ('device', 'أجهزة ومستلزمات', Icons.monitor_heart_rounded, Color(0xFF0B2545)),
+  ('care', 'عناية وتجميل', Icons.face_retouching_natural_rounded, Color(0xFF1E88E5)),
+  ('baby', 'أطفال وأمومة', Icons.child_care_rounded, Color(0xFF7CB342)),
+];
+
+String categoryLabel(String key) {
+  for (final c in appCategories) {
+    if (c.$1 == key) return c.$2;
+  }
+  return key;
+}
+
+class _CategoryStrip extends StatelessWidget {
+  const _CategoryStrip();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 104,
+      child: ListView.separated(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        scrollDirection: Axis.horizontal,
+        itemCount: appCategories.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 12),
+        itemBuilder: (_, i) {
+          final (key, label, icon, color) = appCategories[i];
+          return FadeIn(
+            index: i,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(20),
+              onTap: () {
+                catalogQuery.value = 'cat:$key';
+                tabIndex.value = 1;
+              },
+              child: SizedBox(
+                width: 80,
+                child: Column(children: [
+                  Container(
+                    width: 64,
+                    height: 64,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topRight,
+                        end: Alignment.bottomLeft,
+                        colors: [color.withOpacity(0.14), HootColors.green.withOpacity(0.16)],
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Icon(icon, color: color, size: 30),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700)),
+                ]),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
 const _vendorColors = [HootColors.blue, HootColors.greenDark, HootColors.navy, Color(0xFF1E88E5), Color(0xFF7CB342)];
 
 class _VendorStrip extends StatelessWidget {
@@ -460,6 +555,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
   Timer? _debounce;
   int _vendorId = 0;
   bool _hot = false;
+  String _category = '';
   bool _grid = true;
 
   final List<Product> _items = [];
@@ -504,6 +600,11 @@ class _CatalogScreenState extends State<CatalogScreen> {
   void _applyQuery() {
     final q = catalogQuery.value;
     if (q.isEmpty) return;
+    if (q.startsWith('cat:')) {
+      setState(() => _category = q.substring(4));
+      catalogQuery.value = '';
+      return;
+    }
     if (q == '#hot') {
       _hot = true;
       _vendorId = 0;
@@ -644,6 +745,9 @@ class _CatalogScreenState extends State<CatalogScreen> {
                 _reload();
               }),
               _chip('🏢 $_vendorLabel', _vendorId != 0, _pickVendor),
+              if (_category.isNotEmpty)
+                _chip('✕ ${categoryLabel(_category)}', true, () => setState(() => _category = ''),
+                    color: HootColors.greenDark),
               if (_vendorId != 0)
                 _chip('✕ إلغاء المورد', false, () {
                   _vendorId = 0;
@@ -652,6 +756,16 @@ class _CatalogScreenState extends State<CatalogScreen> {
             ],
           ),
         ),
+        if (_category.isNotEmpty)
+          Container(
+            margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: HootColors.green.withOpacity(0.14), borderRadius: BorderRadius.circular(14)),
+            child: Text(
+              'تصنيف "${categoryLabel(_category)}" معبّى على الأصناف بأودو، وفلترته هون بتشتغل بعد تحديث بسيط على الخادم. حالياً بتظهر كل الأصناف.',
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+          ),
         Padding(
           padding: const EdgeInsets.fromLTRB(18, 6, 18, 6),
           child: Row(children: [
@@ -955,6 +1069,15 @@ class OrdersScreen extends StatefulWidget {
   State<OrdersScreen> createState() => _OrdersScreenState();
 }
 
+class _OrderItem {
+  final String name;
+  final DateTime? date;
+  final String total;
+  final int step; // -1 cancelled, 0 new .. 3 delivered
+  final VoidCallback onTap;
+  _OrderItem(this.name, this.date, this.total, this.step, this.onTap);
+}
+
 class _OrdersScreenState extends State<OrdersScreen> {
   List<PortalOrder>? _orders;
   bool _error = false;
@@ -964,13 +1087,17 @@ class _OrdersScreenState extends State<OrdersScreen> {
     super.initState();
     _load();
     ordersVersion.addListener(_load);
+    sentOrders.addListener(_rebuild);
   }
 
   @override
   void dispose() {
     ordersVersion.removeListener(_load);
+    sentOrders.removeListener(_rebuild);
     super.dispose();
   }
+
+  void _rebuild() => setState(() {});
 
   Future<void> _load() async {
     try {
@@ -986,33 +1113,58 @@ class _OrdersScreenState extends State<OrdersScreen> {
     }
   }
 
+  static int _stepOf(PortalOrder o) {
+    if (o.state == 'cancel') return -1;
+    if (o.state == 'draft' || o.state == 'sent') return 0;
+    if (o.delivery == 'full') return 3;
+    if (o.delivery == 'partial' || o.delivery == 'started') return 2;
+    return 1;
+  }
+
+  List<_OrderItem> _items(BuildContext context) {
+    final server = _orders ?? [];
+    final known = {for (final o in server) o.id};
+    final items = <_OrderItem>[
+      // Orders just sent from the app that Odoo doesn't list yet
+      for (final s in sentOrders.value)
+        if (!known.contains(s.id))
+          _OrderItem('طلب رقم ${s.id}', s.date, s.total, 0, () {
+            final u = Uri.parse(s.url);
+            openPortal(context, 'طلب رقم ${s.id}', u.hasQuery ? '${u.path}?${u.query}' : u.path);
+          }),
+      for (final o in server)
+        _OrderItem(o.name, o.date?.toLocal(), money(o.total), _stepOf(o), () {
+          Navigator.of(context).push(MaterialPageRoute(builder: (_) => OrderDetailScreen(order: o)));
+        }),
+    ];
+    items.sort((a, b) => (b.date ?? DateTime(2000)).compareTo(a.date ?? DateTime(2000)));
+    return items;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final items = _items(context);
     Widget body;
-    if (_orders == null && !_error) {
+    if (_orders == null && !_error && items.isEmpty) {
       body = const Center(child: CircularProgressIndicator());
-    } else if (_error) {
+    } else if (items.isEmpty) {
       body = EmptyState(
         icon: Icons.receipt_long_rounded,
-        title: 'ما قدرنا نجيب الطلبات',
-        sub: 'تقدر تشوفها من البورتال',
-        action: FilledButton(onPressed: () => openPortal(context, 'طلباتي', '/my/orders'), child: const Text('فتح طلباتي')),
-      );
-    } else if (_orders!.isEmpty) {
-      body = EmptyState(
-        icon: Icons.receipt_long_rounded,
-        title: 'ما في طلبات لسا',
-        sub: 'أول طلب بترسله بيظهر هون',
-        action: FilledButton(onPressed: () => tabIndex.value = 1, child: const Text('ابدأ الطلب')),
+        title: _error ? 'ما قدرنا نجيب الطلبات' : 'ما في طلبات لسا',
+        sub: _error ? 'تأكد من الإنترنت وحاول مرة ثانية' : 'أول طلب بترسله بيظهر هون',
+        action: FilledButton(
+          onPressed: _error ? _load : () => tabIndex.value = 1,
+          child: Text(_error ? 'إعادة المحاولة' : 'ابدأ الطلب'),
+        ),
       );
     } else {
       body = RefreshIndicator(
         onRefresh: _load,
         child: ListView.separated(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-          itemCount: _orders!.length,
+          itemCount: items.length,
           separatorBuilder: (_, __) => const SizedBox(height: 12),
-          itemBuilder: (_, i) => FadeIn(index: i, child: _OrderCard(_orders![i])),
+          itemBuilder: (_, i) => FadeIn(index: i, child: _OrderCard(items[i])),
         ),
       );
     }
@@ -1024,38 +1176,30 @@ class _OrdersScreenState extends State<OrdersScreen> {
 }
 
 const _steps = ['جديد', 'مؤكد', 'بالطريق', 'تم التسليم'];
+const _stepColors = [HootColors.blue, Colors.orange, HootColors.blueLight, HootColors.greenDark];
 
 class _OrderCard extends StatelessWidget {
   const _OrderCard(this.o);
-  final PortalOrder o;
-
-  int get _step {
-    if (o.state == 'draft' || o.state == 'sent') return 0;
-    if (o.delivery == 'full') return 3;
-    if (o.delivery == 'partial' || o.delivery == 'started') return 2;
-    return 1;
-  }
+  final _OrderItem o;
 
   @override
   Widget build(BuildContext context) {
-    final cancelled = o.state == 'cancel';
-    final colors = [HootColors.blue, Colors.orange, HootColors.blueLight, HootColors.greenDark];
-    final step = _step;
-    final color = cancelled ? HootColors.danger : colors[step];
-    final d = o.date?.toLocal();
+    final cancelled = o.step < 0;
+    final step = cancelled ? 0 : o.step;
+    final color = cancelled ? HootColors.danger : _stepColors[step];
+    final d = o.date;
     return Material(
       color: Colors.white,
       borderRadius: BorderRadius.circular(20),
       child: InkWell(
         borderRadius: BorderRadius.circular(20),
-        onTap: () => openPortal(context, o.name, '/my/orders/${o.id}'),
+        onTap: o.onTap,
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(borderRadius: BorderRadius.circular(20), border: Border.all(color: HootColors.line)),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
-              Text(o.name, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
-              const Spacer(),
+              Expanded(child: Text(o.name, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16))),
               Pill(cancelled ? 'ملغي' : _steps[step], color: color, solid: true),
             ]),
             if (d != null) ...[
@@ -1079,7 +1223,280 @@ class _OrderCard extends StatelessWidget {
               ]),
             ],
             const SizedBox(height: 10),
-            Text(money(o.total), style: const TextStyle(fontWeight: FontWeight.w900, color: HootColors.blue, fontSize: 17)),
+            Row(children: [
+              Expanded(
+                child: Text(o.total, style: const TextStyle(fontWeight: FontWeight.w900, color: HootColors.blue, fontSize: 17)),
+              ),
+              const Icon(Icons.chevron_left_rounded, color: HootColors.muted),
+            ]),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+/// Lines of an order or invoice, read from Odoo with the pharmacy's access.
+class _LinesView extends StatelessWidget {
+  const _LinesView({required this.header, required this.future, required this.total});
+  final Widget header;
+  final Future<List<DocLine>> future;
+  final String total;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<DocLine>>(
+      future: future,
+      builder: (context, snap) {
+        return ListView(padding: const EdgeInsets.fromLTRB(16, 4, 16, 24), children: [
+          header,
+          const SizedBox(height: 14),
+          const Text('الأصناف', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+          const SizedBox(height: 8),
+          if (snap.connectionState != ConnectionState.done)
+            const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()))
+          else if (snap.hasError)
+            const Padding(padding: EdgeInsets.all(24), child: Center(child: Text('ما قدرنا نجيب الأصناف')))
+          else
+            for (final l in snap.data!)
+              Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+                child: Row(children: [
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(l.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+                      const SizedBox(height: 2),
+                      Text('${_qty(l.qty)} × ${money(l.price)}', style: const TextStyle(color: HootColors.muted, fontSize: 12)),
+                    ]),
+                  ),
+                  Text(money(l.subtotal), style: const TextStyle(fontWeight: FontWeight.w900, color: HootColors.navy)),
+                ]),
+              ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(gradient: HootColors.brandGradient, borderRadius: BorderRadius.circular(18)),
+            child: Row(children: [
+              const Expanded(child: Text('الإجمالي', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800))),
+              Text(total, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 18)),
+            ]),
+          ),
+        ]);
+      },
+    );
+  }
+
+  static String _qty(double q) => q == q.roundToDouble() ? q.toInt().toString() : q.toStringAsFixed(2);
+}
+
+class OrderDetailScreen extends StatelessWidget {
+  const OrderDetailScreen({super.key, required this.order});
+  final PortalOrder order;
+
+  @override
+  Widget build(BuildContext context) {
+    final step = _OrdersScreenState._stepOf(order);
+    final cancelled = step < 0;
+    final d = order.date?.toLocal();
+    return Scaffold(
+      appBar: AppBar(title: Text(order.name, style: const TextStyle(fontWeight: FontWeight.w900))),
+      body: _LinesView(
+        future: api.orderLines(order.id),
+        total: money(order.total),
+        header: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18)),
+          child: Row(children: [
+            Expanded(
+              child: Text(d == null ? '' : 'تاريخ الطلب: ${d.day}/${d.month}/${d.year}',
+                  style: const TextStyle(fontWeight: FontWeight.w700)),
+            ),
+            Pill(cancelled ? 'ملغي' : _steps[step],
+                color: cancelled ? HootColors.danger : _stepColors[step], solid: true),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+// ───────────────────────────── Invoices / statement ─────────────────────────────
+
+String _payLabel(Invoice m) {
+  if (m.isRefund) return 'مرتجع';
+  switch (m.paymentState) {
+    case 'paid':
+    case 'in_payment':
+      return 'مدفوعة';
+    case 'partial':
+      return 'مدفوعة جزئياً';
+    case 'reversed':
+      return 'معكوسة';
+    default:
+      final due = m.due;
+      if (due != null && due.isBefore(DateTime.now())) return 'متأخرة';
+      return 'غير مدفوعة';
+  }
+}
+
+Color _payColor(String label) {
+  switch (label) {
+    case 'مدفوعة':
+      return HootColors.greenDark;
+    case 'مدفوعة جزئياً':
+      return Colors.orange;
+    case 'متأخرة':
+      return HootColors.danger;
+    case 'مرتجع':
+      return HootColors.navy;
+    default:
+      return HootColors.blue;
+  }
+}
+
+class InvoicesScreen extends StatefulWidget {
+  const InvoicesScreen({super.key});
+
+  @override
+  State<InvoicesScreen> createState() => _InvoicesScreenState();
+}
+
+class _InvoicesScreenState extends State<InvoicesScreen> {
+  late Future<List<Invoice>> _future = api.invoices();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('كشف الحساب والفواتير', style: TextStyle(fontWeight: FontWeight.w900))),
+      body: FutureBuilder<List<Invoice>>(
+        future: _future,
+        builder: (context, snap) {
+          if (snap.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
+          if (snap.hasError) {
+            return EmptyState(
+              icon: Icons.cloud_off_rounded,
+              title: 'ما قدرنا نجيب الفواتير',
+              sub: 'تأكد من الإنترنت وحاول مرة ثانية',
+              action: FilledButton(
+                onPressed: () => setState(() => _future = api.invoices()),
+                child: const Text('إعادة المحاولة'),
+              ),
+            );
+          }
+          final list = snap.data!;
+          double due = 0, overdue = 0;
+          final now = DateTime.now();
+          for (final m in list) {
+            final r = m.isRefund ? -m.residual : m.residual;
+            due += r;
+            if (!m.isRefund && m.residual > 0 && m.due != null && m.due!.isBefore(now)) overdue += m.residual;
+          }
+          return RefreshIndicator(
+            onRefresh: () async => setState(() => _future = api.invoices()),
+            child: ListView(padding: const EdgeInsets.fromLTRB(16, 4, 16, 24), children: [
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(gradient: HootColors.heroGradient, borderRadius: BorderRadius.circular(24)),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('الرصيد المستحق', style: TextStyle(color: Colors.white70)),
+                  Text(money(due), style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 6),
+                  Row(children: [
+                    Pill('متأخر: ${money(overdue)}', color: overdue > 0 ? HootColors.hot : HootColors.green, solid: true),
+                    const SizedBox(width: 6),
+                    Pill('${list.length} مستند', color: Colors.white),
+                  ]),
+                ]),
+              ),
+              const SizedBox(height: 14),
+              if (list.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Center(child: Text('ما في فواتير ظاهرة لحسابك لحد الآن')),
+                ),
+              for (final m in list) _invoiceTile(context, m),
+            ]),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _invoiceTile(BuildContext context, Invoice m) {
+    final label = _payLabel(m);
+    final d = m.date;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => InvoiceDetailScreen(invoice: m))),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: _payColor(label).withOpacity(0.1), borderRadius: BorderRadius.circular(14)),
+                child: Icon(m.isRefund ? Icons.assignment_return_rounded : Icons.description_rounded, color: _payColor(label)),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(m.name, style: const TextStyle(fontWeight: FontWeight.w900)),
+                  Text(d == null ? '' : '${d.day}/${d.month}/${d.year}', style: const TextStyle(color: HootColors.muted, fontSize: 12)),
+                ]),
+              ),
+              Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                Text(money(m.total), style: const TextStyle(fontWeight: FontWeight.w900, color: HootColors.navy)),
+                const SizedBox(height: 4),
+                Pill(label, color: _payColor(label)),
+              ]),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class InvoiceDetailScreen extends StatelessWidget {
+  const InvoiceDetailScreen({super.key, required this.invoice});
+  final Invoice invoice;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = _payLabel(invoice);
+    final d = invoice.date;
+    final due = invoice.due;
+    return Scaffold(
+      appBar: AppBar(title: Text(invoice.name, style: const TextStyle(fontWeight: FontWeight.w900))),
+      body: _LinesView(
+        future: api.invoiceLines(invoice.id),
+        total: money(invoice.total),
+        header: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18)),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Expanded(
+                child: Text(d == null ? '' : 'التاريخ: ${d.day}/${d.month}/${d.year}',
+                    style: const TextStyle(fontWeight: FontWeight.w700)),
+              ),
+              Pill(label, color: _payColor(label), solid: true),
+            ]),
+            if (due != null) ...[
+              const SizedBox(height: 6),
+              Text('الاستحقاق: ${due.day}/${due.month}/${due.year}', style: const TextStyle(color: HootColors.muted)),
+            ],
+            if (invoice.residual > 0) ...[
+              const SizedBox(height: 6),
+              Text('المتبقي: ${money(invoice.residual)}',
+                  style: const TextStyle(color: HootColors.danger, fontWeight: FontWeight.w800)),
+            ],
           ]),
         ),
       ),
@@ -1114,11 +1531,11 @@ class AccountScreen extends StatelessWidget {
           ]),
         ),
         const SizedBox(height: 16),
-        _tile(Icons.receipt_long_rounded, 'كشف الحساب والفواتير', '', () => openPortal(context, 'الفواتير', '/my/invoices')),
-        _tile(Icons.shopping_bag_rounded, 'كل طلباتي', '', () => openPortal(context, 'طلباتي', '/my/orders')),
-        _tile(Icons.event_available_rounded, 'حجز زيارة مندوب', '', () => openPortal(context, 'المواعيد', '/appointment')),
-        _tile(Icons.language_rounded, 'البورتال الكامل', 'المرتجعات وكل الخدمات', () => openPortal(context, 'البورتال', '/my')),
-        _tile(Icons.dns_rounded, 'إعدادات الخادم', 'Staging / Live', () => editServerDialog(context)),
+        _tile(Icons.account_balance_wallet_rounded, 'كشف الحساب والفواتير', 'الرصيد المستحق وكل الفواتير',
+            () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const InvoicesScreen()))),
+        _tile(Icons.shopping_bag_rounded, 'طلباتي', 'حالة كل طلب وأصنافه', () => tabIndex.value = 3),
+        _tile(Icons.event_available_rounded, 'حجز زيارة مندوب', 'اختر اليوم والوقت المناسب',
+            () => openPortal(context, 'حجز زيارة مندوب', '/appointment')),
         const SizedBox(height: 8),
         const Padding(
           padding: EdgeInsets.fromLTRB(4, 0, 4, 8),
@@ -1126,13 +1543,13 @@ class AccountScreen extends StatelessWidget {
         ),
         Row(children: [
           Expanded(
-            child: _contactBtn(Icons.call_rounded, 'اتصال', kSupportPhoneDisplay, HootColors.blue,
-                () => launchUrl(Uri.parse('tel:$kSupportPhone'))),
+            child: _contactBtn(const Icon(Icons.call_rounded, color: Colors.white), 'اتصال', kSupportPhoneDisplay,
+                HootColors.blue, () => launchUrl(Uri.parse('tel:$kSupportPhone'))),
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: _contactBtn(Icons.chat_rounded, 'واتساب', kSupportWhatsappDisplay, const Color(0xFF25D366),
-                () => launchUrl(Uri.parse('https://wa.me/$kSupportWhatsapp'), mode: LaunchMode.externalApplication)),
+            child: _contactBtn(const FaIcon(FontAwesomeIcons.whatsapp, color: Colors.white), 'واتساب',
+                kSupportWhatsappDisplay, kWhatsappGreen, openWhatsapp),
           ),
         ]),
         const SizedBox(height: 18),
@@ -1155,7 +1572,7 @@ class AccountScreen extends StatelessWidget {
     );
   }
 
-  Widget _contactBtn(IconData icon, String title, String sub, Color color, VoidCallback onTap) => Material(
+  Widget _contactBtn(Widget icon, String title, String sub, Color color, VoidCallback onTap) => Material(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
         child: InkWell(
@@ -1164,7 +1581,7 @@ class AccountScreen extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
             child: Column(children: [
-              CircleAvatar(radius: 22, backgroundColor: color, child: Icon(icon, color: Colors.white)),
+              CircleAvatar(radius: 22, backgroundColor: color, child: icon),
               const SizedBox(height: 8),
               Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
               Text(sub, textDirection: TextDirection.ltr, style: const TextStyle(fontSize: 12, color: HootColors.muted)),

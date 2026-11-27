@@ -1,9 +1,41 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api.dart';
+
+/// An order sent from the app. Kept on the phone so it shows in
+/// "طلباتي" right away, even before Odoo lists it for the pharmacy.
+class SentOrder {
+  final int id;
+  final String url;
+  final String total;
+  final DateTime date;
+  final int items;
+  SentOrder(this.id, this.url, this.total, this.date, this.items);
+
+  Map<String, dynamic> toJson() => {'id': id, 'url': url, 'total': total, 'date': date.toIso8601String(), 'items': items};
+  static SentOrder fromJson(Map<String, dynamic> j) =>
+      SentOrder(j['id'] as int, j['url'] as String, j['total'] as String, DateTime.parse(j['date'] as String), j['items'] as int);
+}
+
+final sentOrders = ValueNotifier<List<SentOrder>>([]);
+
+Future<void> loadSentOrders() async {
+  final p = await SharedPreferences.getInstance();
+  final raw = p.getString('sent_orders');
+  if (raw == null) return;
+  try {
+    sentOrders.value = [for (final j in jsonDecode(raw) as List) SentOrder.fromJson(Map<String, dynamic>.from(j as Map))];
+  } catch (_) {}
+}
+
+Future<void> _saveSentOrders() async {
+  final p = await SharedPreferences.getInstance();
+  await p.setString('sent_orders', jsonEncode([for (final o in sentOrders.value.take(30)) o.toJson()]));
+}
 
 class CartLine {
   final Product product;
@@ -74,6 +106,12 @@ class CartModel extends ChangeNotifier {
     notifyListeners();
     try {
       final url = await api.submit(pricelistId!, {for (final l in _lines.values) l.product.id: l.qty});
+      final id = int.tryParse(RegExp(r'/orders/(\d+)').firstMatch(url)?.group(1) ?? '');
+      if (id != null) {
+        final total = serverTotal.isNotEmpty ? serverTotal : money(localTotal);
+        sentOrders.value = [SentOrder(id, url, total, DateTime.now(), count), ...sentOrders.value];
+        await _saveSentOrders();
+      }
       _lines.clear();
       serverTotal = '';
       return url;

@@ -79,6 +79,7 @@ class _PortalPageState extends State<PortalPage> {
       ..setNavigationDelegate(NavigationDelegate(
         onProgress: (p) => setState(() => _progress = p),
         onPageStarted: (_) => setState(() => _error = false),
+        onPageFinished: (_) => _c.runJavaScript(_kHideWebsiteChrome),
         onWebResourceError: (e) {
           if (e.isForMainFrame ?? true) setState(() => _error = true);
         },
@@ -124,6 +125,19 @@ class _PortalPageState extends State<PortalPage> {
     );
   }
 }
+
+/// Hides the website header/footer so pages look like part of the app.
+const _kHideWebsiteChrome = '''
+(function(){
+  var css = 'header, footer, #o_main_nav, .o_header_standard, .o_footer, #footer, .o_portal_navbar, '
+    + '.o_frontend_to_backend_nav, .o_cookies_discrete, #website_cookies_bar, .breadcrumb, '
+    + '.o_livechat_button { display: none !important; } '
+    + '#wrapwrap { padding-top: 0 !important; } main { padding-top: 8px; } body { background: #F3F6FB !important; }';
+  var st = document.getElementById('hoot-app-style');
+  if (!st) { st = document.createElement('style'); st.id = 'hoot-app-style'; document.head.appendChild(st); }
+  st.textContent = css;
+})();
+''';
 
 /// Shown when there is no internet.
 class OfflineView extends StatelessWidget {

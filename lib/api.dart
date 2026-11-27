@@ -63,6 +63,31 @@ class PortalOrder {
   const PortalOrder(this.id, this.name, this.date, this.total, this.state, this.delivery);
 }
 
+
+class Invoice {
+  final int id;
+  final String name;
+  final String type; // out_invoice / out_refund
+  final DateTime? date;
+  final DateTime? due;
+  final double total;
+  final double residual;
+  final String paymentState;
+  const Invoice(this.id, this.name, this.type, this.date, this.due, this.total, this.residual, this.paymentState);
+  bool get isRefund => type == 'out_refund';
+}
+
+class DocLine {
+  final String name;
+  final double qty;
+  final double price;
+  final double subtotal;
+  const DocLine(this.name, this.qty, this.price, this.subtotal);
+}
+
+DateTime? _date(dynamic v) => v is String ? DateTime.tryParse(v) : null;
+double _num(dynamic v) => v is num ? v.toDouble() : 0;
+
 class ApiException implements Exception {
   final String message;
   final bool auth;
@@ -311,6 +336,82 @@ class OdooApi {
     if (r is Map && r['url'] != null) return r['url'].toString();
     final code = r is Map ? (r['error'] ?? '').toString() : '';
     throw ApiException(code.isEmpty ? 'ما قدرنا نرسل الطلب' : 'ما قدرنا نرسل الطلب ($code)');
+  }
+
+
+  Future<List<dynamic>> _searchRead(String model, List domain, List<String> fields,
+      {String? order, int limit = 80}) async {
+    final r = await _rpc('/web/dataset/call_kw/$model/search_read', {
+      'model': model,
+      'method': 'search_read',
+      'args': [],
+      'kwargs': {
+        'domain': domain,
+        'fields': fields,
+        if (order != null) 'order': order,
+        'limit': limit,
+      },
+    });
+    return r is List ? r : [];
+  }
+
+  Future<List<Invoice>> invoices() async {
+    final r = await _searchRead(
+      'account.move',
+      [
+        ['move_type', 'in', ['out_invoice', 'out_refund']]
+      ],
+      ['name', 'move_type', 'invoice_date', 'invoice_date_due', 'amount_total', 'amount_residual', 'payment_state'],
+      order: 'invoice_date desc, id desc',
+      limit: 200,
+    );
+    return [
+      for (final m in r)
+        Invoice(
+          m['id'] as int,
+          (m['name'] ?? '').toString(),
+          (m['move_type'] ?? '').toString(),
+          _date(m['invoice_date']),
+          _date(m['invoice_date_due']),
+          _num(m['amount_total']),
+          _num(m['amount_residual']),
+          (m['payment_state'] ?? '').toString(),
+        ),
+    ];
+  }
+
+  Future<List<DocLine>> invoiceLines(int moveId) async {
+    final r = await _searchRead(
+      'account.move.line',
+      [
+        ['move_id', '=', moveId],
+        ['display_type', '=', 'product']
+      ],
+      ['name', 'quantity', 'price_unit', 'price_subtotal'],
+      order: 'sequence, id',
+      limit: 500,
+    );
+    return [
+      for (final l in r)
+        DocLine((l['name'] ?? '').toString(), _num(l['quantity']), _num(l['price_unit']), _num(l['price_subtotal'])),
+    ];
+  }
+
+  Future<List<DocLine>> orderLines(int orderId) async {
+    final r = await _searchRead(
+      'sale.order.line',
+      [
+        ['order_id', '=', orderId],
+        ['display_type', '=', false]
+      ],
+      ['name', 'product_uom_qty', 'price_unit', 'price_subtotal'],
+      order: 'sequence, id',
+      limit: 500,
+    );
+    return [
+      for (final l in r)
+        DocLine((l['name'] ?? '').toString(), _num(l['product_uom_qty']), _num(l['price_unit']), _num(l['price_subtotal'])),
+    ];
   }
 
   // ───────────── orders ─────────────

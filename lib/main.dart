@@ -16,6 +16,7 @@ import 'theme.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await AppConfig.load();
+  await loadSentOrders();
   final loggedIn = await api.restore();
   runApp(HootApp(loggedIn: loggedIn));
 }

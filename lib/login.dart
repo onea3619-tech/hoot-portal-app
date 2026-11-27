@@ -59,20 +59,17 @@ class _LoginScreenState extends State<LoginScreen> {
       backgroundColor: Colors.white,
       body: SafeArea(
         child: ListView(padding: const EdgeInsets.fromLTRB(24, 24, 24, 24), children: [
-          Align(
-            alignment: AlignmentDirectional.centerEnd,
-            child: IconButton(
-              tooltip: 'إعدادات الخادم',
-              icon: const Icon(Icons.dns_rounded, color: HootColors.muted),
-              onPressed: () => editServerDialog(context),
-            ),
-          ),
+          const SizedBox(height: 24),
           TweenAnimationBuilder<double>(
             tween: Tween(begin: 0.85, end: 1),
             duration: const Duration(milliseconds: 700),
             curve: Curves.easeOutBack,
             builder: (_, v, c) => Transform.scale(scale: v, child: c),
-            child: Image.asset('assets/logo_full.png', height: 170),
+            // Long-press the logo for 2 seconds: hidden server settings (for the technical team).
+            child: GestureDetector(
+              onLongPress: () => editServerDialog(context),
+              child: Image.asset('assets/logo_full.png', height: 170),
+            ),
           ),
           const SizedBox(height: 18),
           const Text('أهلاً بك في Hoot drug store',
