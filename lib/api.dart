@@ -60,7 +60,8 @@ class PortalOrder {
   final double total;
   final String state;
   final String delivery;
-  const PortalOrder(this.id, this.name, this.date, this.total, this.state, this.delivery);
+  final bool invoiced; // a confirmed (posted) invoice exists
+  const PortalOrder(this.id, this.name, this.date, this.total, this.state, this.delivery, [this.invoiced = false]);
 }
 
 
@@ -417,27 +418,40 @@ class OdooApi {
   // ───────────── orders ─────────────
 
   Future<List<PortalOrder>> orders() async {
-    final r = await _rpc('/web/dataset/call_kw/sale.order/search_read', {
-      'model': 'sale.order',
-      'method': 'search_read',
-      'args': [],
-      'kwargs': {
-        'domain': [],
-        'fields': ['name', 'date_order', 'amount_total', 'state', 'delivery_status'],
-        'order': 'date_order desc',
-        'limit': 40,
-      },
-    });
-    if (r is! List) return [];
+    final r = await _searchRead(
+      'sale.order',
+      [],
+      ['name', 'date_order', 'amount_total', 'state', 'delivery_status', 'invoice_ids'],
+      order: 'date_order desc',
+      limit: 60,
+    );
+    final invIds = <int>{for (final o in r) ...((o['invoice_ids'] as List?) ?? []).cast<int>()};
+    var posted = <int>{};
+    if (invIds.isNotEmpty) {
+      try {
+        // The portal only sees posted invoices, so any invoice returned is confirmed.
+        final inv = await _searchRead(
+          'account.move',
+          [
+            ['id', 'in', invIds.toList()],
+            ['state', '=', 'posted']
+          ],
+          ['id'],
+          limit: 500,
+        );
+        posted = {for (final m in inv) m['id'] as int};
+      } catch (_) {}
+    }
     return [
       for (final o in r)
         PortalOrder(
           o['id'] as int,
           (o['name'] ?? '').toString(),
           DateTime.tryParse((o['date_order'] ?? '').toString()),
-          (o['amount_total'] as num?)?.toDouble() ?? 0,
+          _num(o['amount_total']),
           (o['state'] ?? '').toString(),
           (o['delivery_status'] ?? '').toString(),
+          ((o['invoice_ids'] as List?) ?? []).any((i) => posted.contains(i)),
         ),
     ];
   }

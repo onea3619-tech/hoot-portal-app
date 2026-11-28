@@ -131,7 +131,8 @@ const _kHideWebsiteChrome = '''
 (function(){
   var css = 'header, footer, #o_main_nav, .o_header_standard, .o_footer, #footer, .o_portal_navbar, '
     + '.o_frontend_to_backend_nav, .o_cookies_discrete, #website_cookies_bar, .breadcrumb, '
-    + '.o_livechat_button { display: none !important; } '
+    + '.o_livechat_button, #o_flex_portal_menu, [data-bs-target="#o_flex_portal_menu"], [href="#o_flex_portal_menu"], '
+    + '.o_portal_my_home > h3, .o_portal_sidebar { display: none !important; } '
     + '#wrapwrap { padding-top: 0 !important; } main { padding-top: 8px; } body { background: #F3F6FB !important; }';
   var st = document.getElementById('hoot-app-style');
   if (!st) { st = document.createElement('style'); st.id = 'hoot-app-style'; document.head.appendChild(st); }

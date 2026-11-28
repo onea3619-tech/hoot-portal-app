@@ -274,9 +274,6 @@ Future<void> showProductSheet(BuildContext context, Product p) {
         Wrap(spacing: 6, runSpacing: 6, children: [
           Pill(p.hot ? 'Hot Item: نعم' : 'Hot Item: لا', color: p.hot ? HootColors.hot : HootColors.muted),
           Pill(p.bonus.isNotEmpty ? 'بونص ${p.bonus}' : 'بونص: لا يوجد', color: HootColors.greenDark),
-          Pill(p.available ? 'متوفر' : 'غير متوفر',
-              color: p.available ? HootColors.greenDark : HootColors.danger,
-              icon: p.available ? Icons.check_circle_rounded : Icons.cancel_rounded),
         ]),
         const SizedBox(height: 14),
         _info('المورد', p.vendor),

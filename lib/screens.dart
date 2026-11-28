@@ -93,6 +93,12 @@ class _HomeScreenState extends State<HomeScreen> {
         const SliverToBoxAdapter(child: _ScanTip()),
         const SliverToBoxAdapter(child: SectionTitle('التصنيفات')),
         const SliverToBoxAdapter(child: _CategoryStrip()),
+        const SliverToBoxAdapter(child: SectionTitle('وصل حديثاً ✨')),
+        SliverToBoxAdapter(
+          child: _fresh == null
+              ? const SizedBox(height: 120, child: Center(child: CircularProgressIndicator()))
+              : _HorizontalProducts(_fresh!),
+        ),
         SliverToBoxAdapter(
           child: SectionTitle('الموردين', onMore: () {
             catalogQuery.value = '';
@@ -120,10 +126,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 )
               : _HorizontalProducts(_hot!),
         ),
-        if (_fresh != null && _fresh!.isNotEmpty) ...[
-          const SliverToBoxAdapter(child: SectionTitle('وصل حديثاً ✨')),
-          SliverToBoxAdapter(child: _HorizontalProducts(_fresh!)),
-        ],
         const SliverToBoxAdapter(child: SizedBox(height: 24)),
       ]),
     );
@@ -685,6 +687,13 @@ class _CatalogScreenState extends State<CatalogScreen> {
     _reload();
   }
 
+  /// Vendors whose name matches what is typed in the search box.
+  List<Vendor> get _vendorMatches {
+    final q = _ctrl.text.trim().toLowerCase();
+    if (q.length < 2) return const [];
+    return api.vendors.where((v) => v.name.toLowerCase().contains(q)).take(8).toList();
+  }
+
   String get _vendorLabel {
     if (_vendorId == 0) return 'كل الموردين';
     final v = api.vendors.where((e) => e.id == _vendorId);
@@ -756,6 +765,35 @@ class _CatalogScreenState extends State<CatalogScreen> {
             ],
           ),
         ),
+        if (_vendorMatches.isNotEmpty)
+          SizedBox(
+            height: 40,
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+              scrollDirection: Axis.horizontal,
+              children: [
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsetsDirectional.only(end: 6),
+                    child: Text('موردين:', style: TextStyle(fontWeight: FontWeight.w800, color: HootColors.muted)),
+                  ),
+                ),
+                for (final v in _vendorMatches)
+                  Padding(
+                    padding: const EdgeInsetsDirectional.only(end: 6),
+                    child: ActionChip(
+                      avatar: const Icon(Icons.storefront_rounded, size: 16, color: HootColors.blue),
+                      label: Text(v.name),
+                      onPressed: () {
+                        _ctrl.clear();
+                        _vendorId = v.id;
+                        _reload();
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ),
         if (_category.isNotEmpty)
           Container(
             margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -1113,11 +1151,11 @@ class _OrdersScreenState extends State<OrdersScreen> {
     }
   }
 
+  /// مسودة = quotation, مؤكدة = sales order, جاهز = posted invoice.
   static int _stepOf(PortalOrder o) {
     if (o.state == 'cancel') return -1;
     if (o.state == 'draft' || o.state == 'sent') return 0;
-    if (o.delivery == 'full') return 3;
-    if (o.delivery == 'partial' || o.delivery == 'started') return 2;
+    if (o.invoiced) return 2;
     return 1;
   }
 
@@ -1129,8 +1167,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
       for (final s in sentOrders.value)
         if (!known.contains(s.id))
           _OrderItem('طلب رقم ${s.id}', s.date, s.total, 0, () {
-            final u = Uri.parse(s.url);
-            openPortal(context, 'طلب رقم ${s.id}', u.hasQuery ? '${u.path}?${u.query}' : u.path);
+            Navigator.of(context).push(MaterialPageRoute(builder: (_) => SentOrderScreen(order: s)));
           }),
       for (final o in server)
         _OrderItem(o.name, o.date?.toLocal(), money(o.total), _stepOf(o), () {
@@ -1175,8 +1212,8 @@ class _OrdersScreenState extends State<OrdersScreen> {
   }
 }
 
-const _steps = ['جديد', 'مؤكد', 'بالطريق', 'تم التسليم'];
-const _stepColors = [HootColors.blue, Colors.orange, HootColors.blueLight, HootColors.greenDark];
+const _steps = ['مسودة', 'مؤكدة', 'جاهز'];
+const _stepColors = [HootColors.blue, Colors.orange, HootColors.greenDark];
 
 class _OrderCard extends StatelessWidget {
   const _OrderCard(this.o);
@@ -1208,7 +1245,7 @@ class _OrderCard extends StatelessWidget {
             ],
             if (!cancelled) ...[
               const SizedBox(height: 14),
-              Row(children: List.generate(4, (s) {
+              Row(children: List.generate(_steps.length, (s) {
                 return Expanded(
                   child: Container(
                     margin: const EdgeInsetsDirectional.only(end: 4),
@@ -1315,6 +1352,47 @@ class OrderDetailScreen extends StatelessWidget {
             ),
             Pill(cancelled ? 'ملغي' : _steps[step],
                 color: cancelled ? HootColors.danger : _stepColors[step], solid: true),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+/// An order just sent from the app (still a quotation in Odoo).
+class SentOrderScreen extends StatelessWidget {
+  const SentOrderScreen({super.key, required this.order});
+  final SentOrder order;
+
+  @override
+  Widget build(BuildContext context) {
+    final d = order.date;
+    return Scaffold(
+      appBar: AppBar(title: Text('طلب رقم ${order.id}', style: const TextStyle(fontWeight: FontWeight.w900))),
+      body: _LinesView(
+        future: Future.value([
+          for (final l in order.lines)
+            DocLine(
+              (l['name'] ?? '').toString(),
+              (l['qty'] as num? ?? 0).toDouble(),
+              (l['price'] as num? ?? 0).toDouble(),
+              (l['qty'] as num? ?? 0).toDouble() * (l['price'] as num? ?? 0).toDouble(),
+            ),
+        ]),
+        total: order.total,
+        header: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18)),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Expanded(
+                child: Text('تاريخ الطلب: ${d.day}/${d.month}/${d.year}', style: const TextStyle(fontWeight: FontWeight.w700)),
+              ),
+              Pill(_steps[0], color: _stepColors[0], solid: true),
+            ]),
+            const SizedBox(height: 8),
+            const Text('الطلب وصلنا كمسودة، وبيتأكد من قبل فريق المبيعات.',
+                style: TextStyle(color: HootColors.muted, fontSize: 12.5)),
           ]),
         ),
       ),
@@ -1534,8 +1612,22 @@ class AccountScreen extends StatelessWidget {
         _tile(Icons.account_balance_wallet_rounded, 'كشف الحساب والفواتير', 'الرصيد المستحق وكل الفواتير',
             () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const InvoicesScreen()))),
         _tile(Icons.shopping_bag_rounded, 'طلباتي', 'حالة كل طلب وأصنافه', () => tabIndex.value = 3),
+        _tile(Icons.assignment_return_rounded, 'المرتجعات', 'طلبات المرتجع وطلب مرتجع جديد',
+            () => openPortal(context, 'المرتجعات', '/my/returns')),
+        _tile(Icons.badge_rounded, 'بطاقتي', 'بيانات الصيدلية وقائمة الأسعار والمنطقة',
+            () => openPortal(context, 'بطاقتي', '/my/card')),
         _tile(Icons.event_available_rounded, 'حجز زيارة مندوب', 'اختر اليوم والوقت المناسب',
-            () => openPortal(context, 'حجز زيارة مندوب', '/appointment')),
+            () => openPortal(context, 'حجز زيارة مندوب', '/appointment/1')),
+        _tile(Icons.medical_services_rounded, 'حجز يوم طبي', 'يوم طبي مع مستودع أدوية الحوت',
+            () => openPortal(context, 'حجز يوم طبي', '/appointment/2')),
+        _tile(Icons.calendar_month_rounded, 'مواعيدي', 'الزيارات والأيام الطبية المحجوزة',
+            () => openPortal(context, 'مواعيدي', '/my/appointments')),
+        _tile(Icons.support_agent_rounded, 'الدعم والشكاوى', 'تذاكر الدعم ومتابعتها',
+            () => openPortal(context, 'الدعم والشكاوى', '/my/tickets')),
+        _tile(Icons.manage_accounts_rounded, 'بياناتي', 'تعديل بيانات الحساب',
+            () => openPortal(context, 'بياناتي', '/my/account')),
+        _tile(Icons.lock_rounded, 'الأمان وكلمة السر', 'تغيير كلمة السر',
+            () => openPortal(context, 'الأمان وكلمة السر', '/my/security')),
         const SizedBox(height: 8),
         const Padding(
           padding: EdgeInsets.fromLTRB(4, 0, 4, 8),

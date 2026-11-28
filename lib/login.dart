@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'api.dart';
+import 'data.dart';
 import 'main.dart';
 import 'portal.dart';
 import 'theme.dart';
@@ -122,6 +125,30 @@ class _LoginScreenState extends State<LoginScreen> {
                 : const Text('دخول'),
           ),
           const SizedBox(height: 14),
+          const SizedBox(height: 4),
+          const Text('تحتاج مساعدة بالدخول؟ تواصل معنا',
+              textAlign: TextAlign.center, style: TextStyle(color: HootColors.muted, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 10),
+          Row(children: [
+            Expanded(
+              child: _contact(
+                const Icon(Icons.call_rounded, color: Colors.white, size: 20),
+                'اتصال',
+                HootColors.blue,
+                () => launchUrl(Uri.parse('tel:$kSupportPhone')),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _contact(
+                const FaIcon(FontAwesomeIcons.whatsapp, color: Colors.white, size: 20),
+                'واتساب',
+                const Color(0xFF25D366),
+                () => launchUrl(Uri.parse('https://wa.me/$kSupportWhatsapp'), mode: LaunchMode.externalApplication),
+              ),
+            ),
+          ]),
+          const SizedBox(height: 14),
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(color: HootColors.green.withOpacity(0.14), borderRadius: BorderRadius.circular(14)),
@@ -138,4 +165,21 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
     );
   }
+
+  Widget _contact(Widget icon, String label, Color color, VoidCallback onTap) => Material(
+        color: color,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              icon,
+              const SizedBox(width: 8),
+              Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+            ]),
+          ),
+        ),
+      );
 }

@@ -14,11 +14,19 @@ class SentOrder {
   final String total;
   final DateTime date;
   final int items;
-  SentOrder(this.id, this.url, this.total, this.date, this.items);
+  final List<Map<String, dynamic>> lines; // name, qty, price
+  SentOrder(this.id, this.url, this.total, this.date, this.items, [this.lines = const []]);
 
-  Map<String, dynamic> toJson() => {'id': id, 'url': url, 'total': total, 'date': date.toIso8601String(), 'items': items};
-  static SentOrder fromJson(Map<String, dynamic> j) =>
-      SentOrder(j['id'] as int, j['url'] as String, j['total'] as String, DateTime.parse(j['date'] as String), j['items'] as int);
+  Map<String, dynamic> toJson() =>
+      {'id': id, 'url': url, 'total': total, 'date': date.toIso8601String(), 'items': items, 'lines': lines};
+  static SentOrder fromJson(Map<String, dynamic> j) => SentOrder(
+        j['id'] as int,
+        j['url'] as String,
+        j['total'] as String,
+        DateTime.parse(j['date'] as String),
+        j['items'] as int,
+        [for (final l in (j['lines'] as List? ?? [])) Map<String, dynamic>.from(l as Map)],
+      );
 }
 
 final sentOrders = ValueNotifier<List<SentOrder>>([]);
@@ -109,7 +117,8 @@ class CartModel extends ChangeNotifier {
       final id = int.tryParse(RegExp(r'/orders/(\d+)').firstMatch(url)?.group(1) ?? '');
       if (id != null) {
         final total = serverTotal.isNotEmpty ? serverTotal : money(localTotal);
-        sentOrders.value = [SentOrder(id, url, total, DateTime.now(), count), ...sentOrders.value];
+        final lines = [for (final l in _lines.values) {'name': l.product.name, 'qty': l.qty, 'price': l.product.price ?? 0}];
+        sentOrders.value = [SentOrder(id, url, total, DateTime.now(), count, lines), ...sentOrders.value];
         await _saveSentOrders();
       }
       _lines.clear();
