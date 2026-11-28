@@ -203,6 +203,7 @@ class ProductCard extends StatelessWidget {
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
                   priceText(p),
                   if (p.tax.isNotEmpty) TaxText(p),
+                  if (expiryOf(p).isNotEmpty) ExpiryText(p),
                 ]),
               ),
               QtyControl(p, compact: true),
@@ -254,6 +255,7 @@ class ProductRow extends StatelessWidget {
                   for (final s in p.bonusSteps) BonusChip(s),
                   if (p.bonusDiscount > 0) BonusDiscountChip(p.bonusDiscount),
                   if (p.tax.isNotEmpty) TaxText(p),
+                  if (expiryOf(p).isNotEmpty) ExpiryText(p),
                   priceText(p, size: 13),
                 ]),
               ]),
@@ -323,6 +325,7 @@ Future<void> showProductSheet(BuildContext context, Product p) {
         const SizedBox(height: 14),
         _info('المورد', p.vendor),
         if (p.tax.isNotEmpty) _info('الضريبة', taxLabel(p)),
+        if (expiryOf(p).isNotEmpty) _info('تاريخ الانتهاء', expiryOf(p)),
         const SizedBox(height: 16),
         Row(children: [
           Expanded(child: priceText(p, size: 22)),
@@ -597,5 +600,51 @@ class TaxText extends StatelessWidget {
         color: exempt ? HootColors.greenDark : const Color(0xFFB34700),
       ),
     );
+  }
+}
+
+/// Expiry date(s) only, without the batch number: "GS11170 — 07/2028" -> "07/2028".
+String expiryOf(Product p) {
+  // 2049+ is a placeholder for items without an expiry (e.g. devices).
+  final dates = RegExp(r'(\d{1,2})/(\d{4})')
+      .allMatches(p.batchExp)
+      .where((m) => int.parse(m.group(2)!) < 2049)
+      .map((m) => m.group(0)!)
+      .toSet()
+      .toList();
+  return dates.join('، ');
+}
+
+/// Months left until the nearest expiry (null if unknown).
+int? monthsToExpiry(Product p) {
+  final m = RegExp(r'(\d{1,2})/(\d{4})').allMatches(p.batchExp).where((m) => int.parse(m.group(2)!) < 2049).map((m) {
+    final month = int.parse(m.group(1)!), year = int.parse(m.group(2)!);
+    final now = DateTime.now();
+    return (year - now.year) * 12 + (month - now.month);
+  }).toList();
+  if (m.isEmpty) return null;
+  m.sort();
+  return m.first;
+}
+
+/// "انتهاء 07/2028" — red when the nearest expiry is within 6 months.
+class ExpiryText extends StatelessWidget {
+  const ExpiryText(this.p, {super.key});
+  final Product p;
+
+  @override
+  Widget build(BuildContext context) {
+    final months = monthsToExpiry(p);
+    final near = months != null && months <= 6;
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      Icon(Icons.event_rounded, size: 13, color: near ? HootColors.danger : HootColors.navy),
+      const SizedBox(width: 3),
+      Flexible(
+        child: Text('انتهاء ${expiryOf(p)}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: near ? HootColors.danger : HootColors.navy)),
+      ),
+    ]);
   }
 }
