@@ -73,7 +73,10 @@ class CartModel extends ChangeNotifier {
     return pl.isEmpty ? '' : pl.first.name;
   }
 
-  void add(Product p, [int n = 1]) => setQty(p, qtyOf(p) + n);
+  void add(Product p, [int n = 1]) {
+    if (qtyOf(p) == 0) api.track('add_to_cart', productId: p.id, quantity: n.toDouble(), amount: (p.price ?? 0) * n);
+    setQty(p, qtyOf(p) + n);
+  }
   void remove(Product p) => setQty(p, qtyOf(p) - 1);
 
   void setQty(Product p, int n) {
@@ -148,6 +151,7 @@ class CartModel extends ChangeNotifier {
           'lines': [for (final l in _lines.values) {'id': l.product.id, 'qty': l.qty}],
         });
         if (r is Map && r['ok'] == true) {
+          api.track('order_edit', orderId: editingOrderId!, quantity: count.toDouble(), amount: localTotal);
           final url = '/my/orders/$editingOrderId';
           editingOrderId = null;
           editingOrderName = '';
@@ -166,6 +170,7 @@ class CartModel extends ChangeNotifier {
     try {
       final url = await api.submit(pricelistId!, {for (final l in _lines.values) l.product.id: l.qty});
       final id = int.tryParse(RegExp(r'/orders/(\d+)').firstMatch(url)?.group(1) ?? '');
+      api.track('order', orderId: id ?? 0, quantity: count.toDouble(), amount: localTotal);
       if (id != null) {
         final total = serverTotal.isNotEmpty ? serverTotal : money(localTotal);
         final lines = [for (final l in _lines.values) {'name': l.product.name, 'qty': l.qty, 'price': l.product.price ?? 0}];

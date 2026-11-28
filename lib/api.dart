@@ -21,6 +21,7 @@ class Product {
   final double taxPercent;
   final String category;
   final String productType; // Agent / Subagent
+  final String label; // offer / list label set by staff in Sales > App
 
   const Product({
     required this.id,
@@ -35,6 +36,7 @@ class Product {
     this.taxPercent = 0,
     this.category = '',
     this.productType = '',
+    this.label = '',
   });
 
   factory Product.fromJson(Map j) => Product(
@@ -50,6 +52,7 @@ class Product {
         taxPercent: j['tax_percent'] is num ? (j['tax_percent'] as num).toDouble() : 0,
         category: (j['category'] ?? '').toString(),
         productType: (j['product_type'] ?? '').toString(),
+        label: (j['label'] ?? '').toString(),
       );
 
   String get imageUrl => '${AppConfig.baseUrl}/my/quick_order/image/$id?size=256';
@@ -145,6 +148,36 @@ class OdooApi {
 
   /// Generic JSON call to an Odoo route with the pharmacy's session.
   Future<dynamic> jcall(String path, [Map<String, dynamic> params = const {}]) => _rpc(path, params);
+
+  // ── usage events for the "تقرير التطبيق التحليلي" report ──
+  final List<Map<String, dynamic>> _events = [];
+  Timer? _flushTimer;
+
+  /// Records an app event; events are sent in small batches, never blocking the UI.
+  void track(String type,
+      {String value = '', int productId = 0, double quantity = 0, double amount = 0, int? results, int orderId = 0}) {
+    if (sessionId == null) return;
+    _events.add({
+      'type': type,
+      if (value.isNotEmpty) 'value': value,
+      if (productId > 0) 'product_id': productId,
+      if (quantity != 0) 'quantity': quantity,
+      if (amount != 0) 'amount': amount,
+      if (results != null) 'results': results,
+      if (orderId > 0) 'order_id': orderId,
+    });
+    _flushTimer?.cancel();
+    _flushTimer = Timer(Duration(seconds: _events.length >= 20 ? 0 : 4), flushEvents);
+  }
+
+  Future<void> flushEvents() async {
+    if (_events.isEmpty) return;
+    final batch = List<Map<String, dynamic>>.from(_events);
+    _events.clear();
+    try {
+      await _rpc('/hoot_app/track', {'events': batch});
+    } catch (_) {/* analytics is best-effort */}
+  }
 
   Uri _u(String path) => Uri.parse('${AppConfig.baseUrl}$path');
 
@@ -297,8 +330,9 @@ class OdooApi {
   }
 
   Future<CardsPage> cards(
-      {String search = '', int vendorId = 0, bool hot = false, String category = '', bool fresh = false, int offset = 0, int limit = 20}) async {
+      {String search = '', int vendorId = 0, bool hot = false, String category = '', bool fresh = false, String list = '', int offset = 0, int limit = 20}) async {
     final params = <String, dynamic>{'search': search, 'offset': offset, 'limit': limit};
+    if (list.isNotEmpty) params['list'] = list;
     if (vendorId > 0) params['vendor_id'] = vendorId;
     if (hot) params['hot'] = true;
     if (category.isNotEmpty) params['category'] = category;

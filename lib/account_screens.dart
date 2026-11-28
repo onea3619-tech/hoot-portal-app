@@ -426,6 +426,7 @@ class _NewReturnScreenState extends State<NewReturnScreen> {
       });
       if (!mounted) return;
       if (r is Map && r['ok'] == true) {
+        api.track('return', value: _reason, quantity: _qty.values.fold<int>(0, (a, b) => a + b).toDouble());
         _toast(context, 'تم إرسال طلب المرتجع');
         Navigator.pop(context, true);
         return;
@@ -770,6 +771,7 @@ class _BookingScreenState extends State<BookingScreen> {
         'duration': _slot!['duration'],
         'staff_user_id': _slot!['staff_user_id'],
       });
+      if (r is Map && r['error'] == null) api.track('appointment', value: (_slot!['datetime'] ?? '').toString());
       if (!mounted) return;
       if (r is Map && r['ok'] == true) {
         await showDialog(
@@ -889,6 +891,229 @@ class _BookingScreenState extends State<BookingScreen> {
             ),
           ]);
         },
+      ),
+    );
+  }
+}
+
+// ───────────────────────────── Items the pharmacy did not find ─────────────────────────────
+
+const kRequestTitle = 'في أصناف ما لقيتها؟';
+const kRequestSub = 'سجّلها لنتواصل معك بخصوص توفيرها';
+
+class RequestedItemsScreen extends StatefulWidget {
+  final String initialName;
+  const RequestedItemsScreen({super.key, this.initialName = ''});
+
+  @override
+  State<RequestedItemsScreen> createState() => _RequestedItemsScreenState();
+}
+
+class _RequestedItemsScreenState extends State<RequestedItemsScreen> {
+  late Future<dynamic> _f = api.jcall('/hoot_app/requests');
+
+  void _reload() => setState(() => _f = api.jcall('/hoot_app/requests'));
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialName.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _new(widget.initialName));
+    }
+  }
+
+  Future<void> _new([String initial = '']) async {
+    final name = TextEditingController(text: initial);
+    final details = TextEditingController();
+    final qty = TextEditingController(text: '1');
+    final ok = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.fromLTRB(20, 18, 20, 20 + MediaQuery.of(ctx).viewInsets.bottom),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          const Text('سجّل صنف ما لقيته', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 4),
+          const Text('فريق المشتريات رح يتابع الطلب ويرد عليك هون',
+              style: TextStyle(color: HootColors.muted, fontSize: 12.5)),
+          const SizedBox(height: 12),
+          TextField(
+            controller: name,
+            autofocus: initial.isEmpty,
+            decoration: const InputDecoration(labelText: 'اسم الصنف', prefixIcon: Icon(Icons.medication_rounded)),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: qty,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(labelText: 'الكمية المطلوبة تقريباً', prefixIcon: Icon(Icons.numbers_rounded)),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: details,
+            maxLines: 3,
+            decoration: const InputDecoration(labelText: 'تفاصيل (التركيز، الشركة، الشكل...)'),
+          ),
+          const SizedBox(height: 14),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('تسجيل الطلب')),
+        ]),
+      ),
+    );
+    if (ok != true || name.text.trim().isEmpty) return;
+    try {
+      final r = await api.jcall('/hoot_app/requests/create', {
+        'name': name.text.trim(),
+        'details': details.text.trim(),
+        'quantity': double.tryParse(qty.text.trim()) ?? 1,
+      });
+      if (!mounted) return;
+      final done = r is Map && r['ok'] == true;
+      if (done) api.track('request_item', value: name.text.trim());
+      _toast(context, done ? 'تم تسجيل الصنف، رح نتواصل معك قريباً' : 'ما قدرنا نسجل الصنف');
+      _reload();
+    } catch (_) {
+      if (mounted) _toast(context, 'صار خطأ، حاول مرة ثانية');
+    }
+  }
+
+  Color _stateColor(String s) => switch (s) {
+        'available' => HootColors.greenDark,
+        'unavailable' => HootColors.danger,
+        'in_progress' => const Color(0xFFE6A100),
+        _ => HootColors.blue,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('أصناف طلبتها', style: TextStyle(fontWeight: FontWeight.w900))),
+      floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: HootColors.blue,
+        foregroundColor: Colors.white,
+        onPressed: _new,
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('سجّل صنف'),
+      ),
+      body: FutureBuilder(
+        future: _f,
+        builder: (context, snap) {
+          if (snap.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
+          if (snap.hasError || snap.data is! Map) return _errorView(_reload);
+          final list = ((snap.data as Map)['items'] as List? ?? []);
+          return RefreshIndicator(
+            onRefresh: () async => _reload(),
+            child: ListView(padding: const EdgeInsets.fromLTRB(16, 4, 16, 96), children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(gradient: HootColors.heroGradient, borderRadius: BorderRadius.circular(22)),
+                child: const Row(children: [
+                  Icon(Icons.manage_search_rounded, color: Colors.white, size: 40),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(kRequestTitle, style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 17)),
+                      SizedBox(height: 2),
+                      Text(kRequestSub, style: TextStyle(color: Colors.white70, fontSize: 13)),
+                    ]),
+                  ),
+                ]),
+              ),
+              if (list.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.only(top: 40),
+                  child: EmptyState(
+                      icon: Icons.inventory_2_rounded, title: 'ما سجّلت أصناف لسا', sub: 'اكبس "سجّل صنف" واكتب اسم الصنف يلي بدك ياه'),
+                ),
+              for (final t in list)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: _card(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Row(children: [
+                        Expanded(child: Text((t['name'] ?? '').toString(), style: const TextStyle(fontWeight: FontWeight.w900))),
+                        Pill((t['state_label'] ?? '').toString(), color: _stateColor((t['state'] ?? '').toString()), solid: true),
+                      ]),
+                      const SizedBox(height: 4),
+                      Text('الكمية: ${_qty(t['quantity'])}   •   ${_fmtDate((t['date'] ?? '').toString())}',
+                          style: const TextStyle(color: HootColors.muted, fontSize: 12)),
+                      if ((t['details'] ?? '').toString().isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Text((t['details'] ?? '').toString(), maxLines: 3, overflow: TextOverflow.ellipsis),
+                      ],
+                      if ((t['note'] ?? '').toString().isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                              color: HootColors.green.withOpacity(0.14), borderRadius: BorderRadius.circular(14)),
+                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            const Row(children: [
+                              Icon(Icons.reply_rounded, size: 18, color: HootColors.greenDark),
+                              SizedBox(width: 6),
+                              Text('رد المشتريات', style: TextStyle(fontWeight: FontWeight.w900, color: HootColors.greenDark)),
+                            ]),
+                            const SizedBox(height: 4),
+                            Text((t['note'] ?? '').toString()),
+                          ]),
+                        ),
+                      ],
+                    ]),
+                  ),
+                ),
+            ]),
+          );
+        },
+      ),
+    );
+  }
+
+  String _qty(dynamic q) {
+    final v = q is num ? q.toDouble() : 1.0;
+    return v == v.roundToDouble() ? v.toInt().toString() : v.toString();
+  }
+}
+
+/// Card inviting the pharmacy to record items it could not find.
+class RequestItemBanner extends StatelessWidget {
+  final String initialName;
+  const RequestItemBanner({super.key, this.initialName = ''});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: () => Navigator.of(context)
+              .push(MaterialPageRoute(builder: (_) => RequestedItemsScreen(initialName: initialName))),
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: HootColors.blue.withOpacity(0.25), width: 1.4),
+            ),
+            child: const Row(children: [
+              CircleAvatar(
+                  radius: 22, backgroundColor: HootColors.blue, child: Icon(Icons.manage_search_rounded, color: Colors.white)),
+              SizedBox(width: 12),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(kRequestTitle, style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15.5)),
+                  SizedBox(height: 2),
+                  Text(kRequestSub, style: TextStyle(color: HootColors.muted, fontSize: 12.5)),
+                ]),
+              ),
+              Icon(Icons.chevron_left_rounded, color: HootColors.blue),
+            ]),
+          ),
+        ),
       ),
     );
   }

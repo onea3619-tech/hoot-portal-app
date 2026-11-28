@@ -60,6 +60,7 @@ class _ShellState extends State<Shell> {
   void initState() {
     super.initState();
     tabIndex.value = 0;
+    api.track('open');
     _loadMeta();
     Connectivity().checkConnectivity().then(_onConn);
     _sub = Connectivity().onConnectivityChanged.listen(_onConn);

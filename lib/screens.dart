@@ -16,6 +16,7 @@ import 'widgets.dart';
 Future<void> scanToCatalog(BuildContext context) async {
   final code = await Navigator.of(context).push<String>(MaterialPageRoute(builder: (_) => const ScannerPage()));
   if (code == null || code.isEmpty) return;
+  api.track('scan', value: code);
   catalogQuery.value = code;
   tabIndex.value = 1;
 }
@@ -66,13 +67,12 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _load() async {
     _pl = cart.pricelistId;
     try {
-      final page = await api.cards(hot: true);
-      // "وصل حديثاً" is a placeholder for now: a slice of the catalog until
-      // Odoo marks newly received products.
-      final fresh = await api.cards(fresh: true);
+      // Lists managed by staff in Odoo: Sales > App (الأكثر طلباً / Newly Received).
+      final page = await api.cards(list: 'top');
+      final fresh = await api.cards(list: 'new', limit: 12);
       if (mounted) setState(() {
         _hot = page.items;
-        _fresh = fresh.items.take(10).toList();
+        _fresh = fresh.items.take(12).toList();
         _error = false;
       });
     } catch (e) {
@@ -96,7 +96,12 @@ class _HomeScreenState extends State<HomeScreen> {
         SliverToBoxAdapter(
           child: ValueListenableBuilder<int>(valueListenable: metaVersion, builder: (_, __, ___) => const _CategoryStrip()),
         ),
-        const SliverToBoxAdapter(child: SectionTitle('وصل حديثاً ✨')),
+        SliverToBoxAdapter(
+          child: SectionTitle('وصل حديثاً ✨', onMore: () {
+            catalogQuery.value = '#list:new';
+            tabIndex.value = 1;
+          }),
+        ),
         SliverToBoxAdapter(
           child: _fresh == null
               ? const SizedBox(height: 120, child: Center(child: CircularProgressIndicator()))
@@ -113,7 +118,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         SliverToBoxAdapter(
           child: SectionTitle('الأكثر طلباً 🔥', onMore: () {
-            catalogQuery.value = '#hot';
+            catalogQuery.value = '#list:top';
             tabIndex.value = 1;
           }),
         ),
@@ -129,6 +134,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 )
               : _HorizontalProducts(_hot!),
         ),
+        const SliverToBoxAdapter(child: RequestItemBanner()),
         const SliverToBoxAdapter(child: SizedBox(height: 24)),
       ]),
     );
@@ -325,9 +331,9 @@ class _OffersState extends State<_Offers> {
   int _page = 0;
 
   static const _items = [
-    ('عروض البونص', 'بونص على أصناف مختارة', Icons.card_giftcard_rounded, [Color(0xFF5E9A1E), Color(0xFF98C840)], '#hot'),
-    ('جهاز Joycoo Plus', 'اطلبه الآن', Icons.monitor_heart_rounded, [Color(0xFF1C47A8), Color(0xFF3D7BE8)], 'JOYCOO'),
-    ('الأكثر طلباً', 'أصناف Hot Item', Icons.local_fire_department_rounded, [Color(0xFF0B2545), Color(0xFF2458BF)], '#hot'),
+    ('العروض', 'أصناف مختارة بعروض خاصة', Icons.card_giftcard_rounded, [Color(0xFF5E9A1E), Color(0xFF98C840)], '#list:offer'),
+    ('وصل حديثاً', 'آخر الأصناف يلي وصلت المستودع', Icons.new_releases_rounded, [Color(0xFF1C47A8), Color(0xFF3D7BE8)], '#list:new'),
+    ('الأكثر طلباً', 'أكثر الأصناف طلباً من الصيدليات', Icons.local_fire_department_rounded, [Color(0xFF0B2545), Color(0xFF2458BF)], '#list:top'),
   ];
 
   @override
@@ -393,8 +399,15 @@ class _OffersState extends State<_Offers> {
 
 const kWhatsappGreen = Color(0xFF25D366);
 
-void openWhatsapp() =>
-    launchUrl(Uri.parse('https://wa.me/$kSupportWhatsapp'), mode: LaunchMode.externalApplication);
+void openWhatsapp() {
+  api.track('whatsapp');
+  launchUrl(Uri.parse('https://wa.me/$kSupportWhatsapp'), mode: LaunchMode.externalApplication);
+}
+
+void callSupport() {
+  api.track('call');
+  launchUrl(Uri.parse('tel:$kSupportPhone'));
+}
 
 /// Product classification shown in the app ("تصنيف التطبيق" on the product
 /// card in Odoo, plus Agent / Subagent).
@@ -572,6 +585,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
   int _vendorId = 0;
   bool _hot = false;
   String _category = '';
+  String _list = ''; // offer / new / top (Sales > App lists)
   bool _grid = true;
 
   final List<Product> _items = [];
@@ -616,8 +630,21 @@ class _CatalogScreenState extends State<CatalogScreen> {
   void _applyQuery() {
     final q = catalogQuery.value;
     if (q.isEmpty) return;
+    if (q.startsWith('#list:')) {
+      _list = q.substring(6);
+      _category = '';
+      _vendorId = 0;
+      _hot = false;
+      _ctrl.clear();
+      catalogQuery.value = '';
+      api.track('list', value: _list);
+      _reload();
+      return;
+    }
+    _list = '';
     if (q.startsWith('cat:')) {
       _category = q.substring(4);
+      api.track('category', value: _category);
       _vendorId = 0;
       _hot = false;
       _ctrl.clear();
@@ -631,6 +658,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
       _ctrl.clear();
     } else if (q.startsWith('vendor:')) {
       _vendorId = int.tryParse(q.substring(7)) ?? 0;
+      api.track('vendor', value: _vendorLabel);
       _hot = false;
       _ctrl.clear();
     } else {
@@ -651,8 +679,10 @@ class _CatalogScreenState extends State<CatalogScreen> {
       _items.clear();
     });
     try {
-      final page = await api.cards(search: _ctrl.text.trim(), vendorId: _vendorId, hot: _hot, category: _category);
+      final search = _ctrl.text.trim();
+      final page = await api.cards(search: search, vendorId: _vendorId, hot: _hot, category: _category, list: _list);
       if (!mounted || id != _reqId) return;
+      if (search.length >= 2) api.track(page.count == 0 ? 'search_empty' : 'search', value: search, results: page.count);
       setState(() {
         _items.addAll(page.items);
         _count = page.count;
@@ -674,7 +704,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
     final id = _reqId;
     setState(() => _loading = true);
     try {
-      final page = await api.cards(search: _ctrl.text.trim(), vendorId: _vendorId, hot: _hot, category: _category, offset: _items.length);
+      final page = await api.cards(search: _ctrl.text.trim(), vendorId: _vendorId, hot: _hot, category: _category, list: _list, offset: _items.length);
       if (!mounted || id != _reqId) return;
       setState(() {
         _items.addAll(page.items);
@@ -720,6 +750,8 @@ class _CatalogScreenState extends State<CatalogScreen> {
     );
     if (picked == null) return;
     _category = picked;
+    _list = '';
+    if (picked.isNotEmpty) api.track('category', value: picked);
     _reload();
   }
 
@@ -733,6 +765,8 @@ class _CatalogScreenState extends State<CatalogScreen> {
     );
     if (picked == null) return;
     _vendorId = picked;
+    _list = '';
+    if (picked != 0) api.track('vendor', value: _vendorLabel);
     _reload();
   }
 
@@ -742,6 +776,13 @@ class _CatalogScreenState extends State<CatalogScreen> {
     if (q.length < 2) return const [];
     return api.vendors.where((v) => v.name.toLowerCase().contains(q)).take(8).toList();
   }
+
+  String _listLabel(String l) => switch (l) {
+        'offer' => '🎁 العروض',
+        'new' => '✨ وصل حديثاً',
+        'top' => '🔥 الأكثر طلباً',
+        _ => l,
+      };
 
   String get _vendorLabel {
     if (_vendorId == 0) return 'كل الموردين';
@@ -798,6 +839,11 @@ class _CatalogScreenState extends State<CatalogScreen> {
                   color: cart.pricelistId == null ? Colors.orange.shade800 : HootColors.blue,
                 ),
               ),
+              if (_list.isNotEmpty)
+                _chip('${_listLabel(_list)}  ✕', true, () {
+                  _list = '';
+                  _reload();
+                }, color: HootColors.greenDark),
               _chip('🔥 Hot', _hot, () {
                 _hot = !_hot;
                 _reload();
@@ -866,7 +912,14 @@ class _CatalogScreenState extends State<CatalogScreen> {
       );
     }
     if (_items.isEmpty) {
-      return const EmptyState(icon: Icons.search_off_rounded, title: 'ما في نتائج', sub: 'جرّب اسم ثاني أو امسح الباركود');
+      if (_list == 'offer') {
+        return const EmptyState(icon: Icons.card_giftcard_rounded, title: 'ما في عروض حالياً', sub: 'تابعنا، العروض الجديدة بتنزل هون');
+      }
+      return ListView(children: [
+        const SizedBox(height: 20),
+        const EmptyState(icon: Icons.search_off_rounded, title: 'ما في نتائج', sub: 'جرّب اسم ثاني أو امسح الباركود'),
+        RequestItemBanner(initialName: _ctrl.text.trim()),
+      ]);
     }
     final footer = _hasMore
         ? const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator()))
@@ -1790,6 +1843,8 @@ class AccountScreen extends StatelessWidget {
         _tile(Icons.account_balance_wallet_rounded, 'كشف الحساب والفواتير', 'الرصيد المستحق وكل الفواتير',
             () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const InvoicesScreen()))),
         _tile(Icons.shopping_bag_rounded, 'طلباتي', 'حالة كل طلب وأصنافه', () => tabIndex.value = 3),
+        _tile(Icons.manage_search_rounded, 'أصناف طلبتها', 'في أصناف ما لقيتها؟ سجلها وتابع رد المشتريات',
+            () => _go(context, const RequestedItemsScreen())),
         _tile(Icons.assignment_return_rounded, 'المرتجعات', 'طلبات المرتجع وطلب مرتجع جديد', () => _go(context, const ReturnsScreen())),
         _tile(Icons.badge_rounded, 'بطاقتي', 'بيانات الصيدلية وقائمة الأسعار والمنطقة', () => _go(context, const CardScreen())),
         _tile(Icons.event_available_rounded, 'المواعيد', 'حجز زيارة مندوب أو يوم طبي، ومواعيدي', () => _go(context, const AppointmentsScreen())),
@@ -1804,7 +1859,7 @@ class AccountScreen extends StatelessWidget {
         Row(children: [
           Expanded(
             child: _contactBtn(const Icon(Icons.call_rounded, color: Colors.white), 'اتصال', kSupportPhoneDisplay,
-                HootColors.blue, () => launchUrl(Uri.parse('tel:$kSupportPhone'))),
+                HootColors.blue, callSupport),
           ),
           const SizedBox(width: 10),
           Expanded(

@@ -169,6 +169,10 @@ class ProductCard extends StatelessWidget {
               const Spacer(),
               Flexible(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                  if (p.label.isNotEmpty) ...[
+                    Pill(p.label, color: const Color(0xFFE65100), icon: Icons.local_offer_rounded, solid: true),
+                    const SizedBox(height: 4),
+                  ],
                   if (p.hot) const Pill('Hot', color: HootColors.hot, icon: Icons.local_fire_department_rounded, solid: true),
                   if (p.bonus.isNotEmpty) ...[
                     const SizedBox(height: 4),
@@ -258,6 +262,7 @@ class ProductRow extends StatelessWidget {
 
 /// Bottom sheet with the product details and a big add button.
 Future<void> showProductSheet(BuildContext context, Product p) {
+  api.track('product_view', productId: p.id);
   return showModalBottomSheet(
     context: context,
     isScrollControlled: true,
