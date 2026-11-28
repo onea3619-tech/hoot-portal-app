@@ -174,10 +174,6 @@ class ProductCard extends StatelessWidget {
                     const SizedBox(height: 4),
                   ],
                   if (p.hot) const Pill('Hot', color: HootColors.hot, icon: Icons.local_fire_department_rounded, solid: true),
-                  if (p.tax.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Pill(taxLabel(p), color: HootColors.navy),
-                  ],
                 ]),
               ),
             ]),
@@ -200,16 +196,15 @@ class ProductCard extends StatelessWidget {
               Text(p.promo,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 11, height: 1.25, fontWeight: FontWeight.w700, color: Color(0xFFE65100)))
-            else if (p.batchExp.isNotEmpty)
-              Text('Batch & Exp: ${p.batchExp}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textDirection: TextDirection.ltr,
-                  style: const TextStyle(fontSize: 10.5, color: HootColors.muted)),
+                  style: const TextStyle(fontSize: 11, height: 1.25, fontWeight: FontWeight.w700, color: Color(0xFFE65100))),
             const SizedBox(height: 6),
             Row(children: [
-              Expanded(child: priceText(p)),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                  priceText(p),
+                  if (p.tax.isNotEmpty) TaxText(p),
+                ]),
+              ),
               QtyControl(p, compact: true),
             ]),
           ]),
@@ -258,7 +253,7 @@ class ProductRow extends StatelessWidget {
                   if (p.hot) const Pill('Hot', color: HootColors.hot, icon: Icons.local_fire_department_rounded, solid: true),
                   for (final s in p.bonusSteps) BonusChip(s),
                   if (p.bonusDiscount > 0) BonusDiscountChip(p.bonusDiscount),
-                  if (p.tax.isNotEmpty) Pill(taxLabel(p), color: HootColors.navy),
+                  if (p.tax.isNotEmpty) TaxText(p),
                   priceText(p, size: 13),
                 ]),
               ]),
@@ -327,8 +322,7 @@ Future<void> showProductSheet(BuildContext context, Product p) {
         ],
         const SizedBox(height: 14),
         _info('المورد', p.vendor),
-        _info('Batch & Exp', p.batchExp.isEmpty ? '-' : p.batchExp),
-        if (p.tax.isNotEmpty) _info('الضريبة', p.tax),
+        if (p.tax.isNotEmpty) _info('الضريبة', taxLabel(p)),
         const SizedBox(height: 16),
         Row(children: [
           Expanded(child: priceText(p, size: 22)),
@@ -583,5 +577,25 @@ class HootTitle extends StatelessWidget {
             style: style ?? const TextStyle(fontWeight: FontWeight.w900)),
       ),
     ]);
+  }
+}
+
+/// Tax shown clearly next to the price ("+ ضريبة 16%" / "معفى من الضريبة").
+class TaxText extends StatelessWidget {
+  const TaxText(this.p, {super.key});
+  final Product p;
+
+  @override
+  Widget build(BuildContext context) {
+    final exempt = p.taxPercent == 0;
+    return Text(
+      exempt ? 'معفى من الضريبة' : '+ ${taxLabel(p)}',
+      maxLines: 1,
+      style: TextStyle(
+        fontSize: 11.5,
+        fontWeight: FontWeight.w800,
+        color: exempt ? HootColors.greenDark : const Color(0xFFB34700),
+      ),
+    );
   }
 }
