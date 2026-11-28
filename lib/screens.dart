@@ -12,6 +12,7 @@ import 'invoice_detail.dart';
 import 'login.dart';
 import 'portal.dart';
 import 'theme.dart';
+import 'wds.dart';
 import 'widgets.dart';
 
 Future<void> scanToCatalog(BuildContext context) async {
@@ -139,7 +140,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 )
               : _HorizontalProducts(_hot!),
         ),
-        const SliverToBoxAdapter(child: SizedBox(height: 24)),
+        const SliverToBoxAdapter(child: WdsSignature()),
+        const SliverToBoxAdapter(child: SizedBox(height: 16)),
       ]),
     );
   }
@@ -166,6 +168,7 @@ class _Header extends StatelessWidget {
               const Text('Hoot drug store', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900)),
             ]),
           ),
+          const WdsBadge(onDark: true),
           Material(
             color: kWhatsappGreen,
             shape: const CircleBorder(),
@@ -958,7 +961,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
     }
     final footer = _hasMore
         ? const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator()))
-        : const SizedBox(height: 24);
+        : const Padding(padding: EdgeInsets.only(bottom: 16), child: WdsSignature());
     return RefreshIndicator(
       onRefresh: _reload,
       child: _grid
@@ -1089,6 +1092,7 @@ class CartScreen extends StatelessWidget {
             actions: [
               if (cart.editingOrderId != null)
                 TextButton(onPressed: cart.stopEditing, child: const Text('إلغاء التعديل')),
+              const WdsBadge(),
             ],
           ),
           body: lines.isEmpty
@@ -1354,14 +1358,14 @@ class _OrdersScreenState extends State<OrdersScreen> {
         onRefresh: _load,
         child: ListView.separated(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-          itemCount: items.length,
+          itemCount: items.length + 1,
           separatorBuilder: (_, __) => const SizedBox(height: 12),
-          itemBuilder: (_, i) => FadeIn(index: i, child: _OrderCard(items[i])),
+          itemBuilder: (_, i) => i == items.length ? const WdsSignature() : FadeIn(index: i, child: _OrderCard(items[i])),
         ),
       );
     }
     return Scaffold(
-      appBar: AppBar(title: const HootTitle('طلباتي', style: TextStyle(fontWeight: FontWeight.w900))),
+      appBar: AppBar(actions: const [WdsBadge()], title: const HootTitle('طلباتي', style: TextStyle(fontWeight: FontWeight.w900))),
       body: body,
     );
   }
@@ -1570,7 +1574,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: HootTitle(widget.order.name, style: const TextStyle(fontWeight: FontWeight.w900))),
+      appBar: AppBar(actions: const [WdsBadge()], title: HootTitle(widget.order.name, style: const TextStyle(fontWeight: FontWeight.w900))),
       body: FutureBuilder<Map>(
         future: _future,
         builder: (context, snap) {
@@ -1670,7 +1674,7 @@ class SentOrderScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final d = order.date;
     return Scaffold(
-      appBar: AppBar(title: HootTitle('طلب رقم ${order.id}', style: const TextStyle(fontWeight: FontWeight.w900))),
+      appBar: AppBar(actions: const [WdsBadge()], title: HootTitle('طلب رقم ${order.id}', style: const TextStyle(fontWeight: FontWeight.w900))),
       body: _LinesView(
         future: Future.value([
           for (final l in order.lines)
@@ -1749,7 +1753,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const HootTitle('كشف الحساب والفواتير', style: TextStyle(fontWeight: FontWeight.w900))),
+      appBar: AppBar(actions: const [WdsBadge()], title: const HootTitle('كشف الحساب والفواتير', style: TextStyle(fontWeight: FontWeight.w900))),
       body: FutureBuilder<List<Invoice>>(
         future: _future,
         builder: (context, snap) {
@@ -1797,6 +1801,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                   child: Center(child: Text('ما في فواتير ظاهرة لحسابك لحد الآن')),
                 ),
               for (final m in list) _invoiceTile(context, m),
+              const WdsSignature(),
             ]),
           );
         },
@@ -1853,7 +1858,7 @@ class InvoiceDetailScreen extends StatelessWidget {
     final d = invoice.date;
     final due = invoice.due;
     return Scaffold(
-      appBar: AppBar(title: HootTitle(invoice.name, style: const TextStyle(fontWeight: FontWeight.w900))),
+      appBar: AppBar(actions: const [WdsBadge()], title: HootTitle(invoice.name, style: const TextStyle(fontWeight: FontWeight.w900))),
       body: _LinesView(
         future: api.invoiceLines(invoice.id),
         total: money(invoice.total),
@@ -1894,7 +1899,7 @@ class AccountScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const HootTitle('حسابي', style: TextStyle(fontWeight: FontWeight.w900))),
+      appBar: AppBar(actions: const [WdsBadge()], title: const HootTitle('حسابي', style: TextStyle(fontWeight: FontWeight.w900))),
       body: ListView(padding: const EdgeInsets.fromLTRB(16, 4, 16, 24), children: [
         Container(
           padding: const EdgeInsets.all(18),
@@ -1956,6 +1961,7 @@ class AccountScreen extends StatelessWidget {
           icon: const Icon(Icons.logout_rounded),
           label: const Text('تسجيل الخروج', style: TextStyle(fontWeight: FontWeight.w800)),
         ),
+        const WdsSignature(),
       ]),
     );
   }

@@ -7,6 +7,7 @@ import 'data.dart';
 import 'main.dart';
 import 'portal.dart';
 import 'theme.dart';
+import 'wds.dart';
 
 void goToLogin(BuildContext context) {
   Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
@@ -161,6 +162,8 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ]),
           ),
+          const SizedBox(height: 12),
+          const WdsSignature(),
         ]),
       ),
     );

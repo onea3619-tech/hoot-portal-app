@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'api.dart';
 import 'invoice_detail.dart';
 import 'theme.dart';
+import 'wds.dart';
 import 'widgets.dart';
 
 /// Native "My account" screens, backed by the hoot_app_api module in Odoo.
@@ -43,7 +44,7 @@ class _CardScreenState extends State<CardScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const HootTitle('بطاقتي', style: TextStyle(fontWeight: FontWeight.w900))),
+      appBar: AppBar(actions: const [WdsBadge()], title: const HootTitle('بطاقتي', style: TextStyle(fontWeight: FontWeight.w900))),
       body: FutureBuilder(
         future: _f,
         builder: (context, snap) {
@@ -168,7 +169,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const HootTitle('بياناتي', style: TextStyle(fontWeight: FontWeight.w900))),
+      appBar: AppBar(actions: const [WdsBadge()], title: const HootTitle('بياناتي', style: TextStyle(fontWeight: FontWeight.w900))),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(padding: const EdgeInsets.fromLTRB(16, 4, 16, 24), children: [
@@ -263,7 +264,7 @@ class _PasswordScreenState extends State<PasswordScreen> {
   Widget build(BuildContext context) {
     InputDecoration dec(String l) => InputDecoration(labelText: l, prefixIcon: const Icon(Icons.lock_rounded));
     return Scaffold(
-      appBar: AppBar(title: const HootTitle('الأمان وكلمة السر', style: TextStyle(fontWeight: FontWeight.w900))),
+      appBar: AppBar(actions: const [WdsBadge()], title: const HootTitle('الأمان وكلمة السر', style: TextStyle(fontWeight: FontWeight.w900))),
       body: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 24), children: [
         TextField(controller: _old, obscureText: true, decoration: dec('كلمة السر الحالية')),
         const SizedBox(height: 12),
@@ -317,7 +318,7 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const HootTitle('المرتجعات', style: TextStyle(fontWeight: FontWeight.w900))),
+      appBar: AppBar(actions: const [WdsBadge()], title: const HootTitle('المرتجعات', style: TextStyle(fontWeight: FontWeight.w900))),
       floatingActionButton: FutureBuilder(
         future: _f,
         builder: (context, snap) => FloatingActionButton.extended(
@@ -474,7 +475,7 @@ class _NewReturnScreenState extends State<NewReturnScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const HootTitle('طلب مرتجع جديد', style: TextStyle(fontWeight: FontWeight.w900))),
+      appBar: AppBar(actions: const [WdsBadge()], title: const HootTitle('طلب مرتجع جديد', style: TextStyle(fontWeight: FontWeight.w900))),
       body: Column(children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
@@ -622,7 +623,7 @@ class _TicketsScreenState extends State<TicketsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const HootTitle('الدعم والشكاوى', style: TextStyle(fontWeight: FontWeight.w900))),
+      appBar: AppBar(actions: const [WdsBadge()], title: const HootTitle('الدعم والشكاوى', style: TextStyle(fontWeight: FontWeight.w900))),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: HootColors.blue,
         foregroundColor: Colors.white,
@@ -687,7 +688,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const HootTitle('المواعيد', style: TextStyle(fontWeight: FontWeight.w900))),
+      appBar: AppBar(actions: const [WdsBadge()], title: const HootTitle('المواعيد', style: TextStyle(fontWeight: FontWeight.w900))),
       body: FutureBuilder(
         future: _f,
         builder: (context, snap) {
@@ -829,7 +830,7 @@ class _BookingScreenState extends State<BookingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: HootTitle(widget.title, style: const TextStyle(fontWeight: FontWeight.w900))),
+      appBar: AppBar(actions: const [WdsBadge()], title: HootTitle(widget.title, style: const TextStyle(fontWeight: FontWeight.w900))),
       body: FutureBuilder(
         future: _f,
         builder: (context, snap) {
@@ -1020,7 +1021,7 @@ class _RequestedItemsScreenState extends State<RequestedItemsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const HootTitle('أصناف طلبتها', style: TextStyle(fontWeight: FontWeight.w900))),
+      appBar: AppBar(actions: const [WdsBadge()], title: const HootTitle('أصناف طلبتها', style: TextStyle(fontWeight: FontWeight.w900))),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: HootColors.blue,
         foregroundColor: Colors.white,

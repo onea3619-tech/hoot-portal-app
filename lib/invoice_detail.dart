@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'api.dart';
 import 'theme.dart';
+import 'wds.dart';
 import 'widgets.dart';
 
 /// Opens the full invoice details (same information as the Compact Invoice form).
@@ -51,7 +52,7 @@ class _InvoiceFullScreenState extends State<InvoiceFullScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const HootTitle('تفاصيل الفاتورة')),
+      appBar: AppBar(actions: const [WdsBadge()], title: const HootTitle('تفاصيل الفاتورة')),
       body: FutureBuilder(
         future: _f,
         builder: (context, snap) {
