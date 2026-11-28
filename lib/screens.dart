@@ -96,17 +96,20 @@ class _HomeScreenState extends State<HomeScreen> {
         SliverToBoxAdapter(
           child: ValueListenableBuilder<int>(valueListenable: metaVersion, builder: (_, __, ___) => const _CategoryStrip()),
         ),
-        SliverToBoxAdapter(
-          child: SectionTitle('وصل حديثاً ✨', onMore: () {
-            catalogQuery.value = '#list:new';
-            tabIndex.value = 1;
-          }),
-        ),
-        SliverToBoxAdapter(
-          child: _fresh == null
-              ? const SizedBox(height: 120, child: Center(child: CircularProgressIndicator()))
-              : _HorizontalProducts(_fresh!),
-        ),
+        // "وصل حديثاً" shows only the items staff register in Sales > App > Newly Received.
+        if (_fresh == null || _fresh!.isNotEmpty) ...[
+          SliverToBoxAdapter(
+            child: SectionTitle('وصل حديثاً ✨', onMore: () {
+              catalogQuery.value = '#list:new';
+              tabIndex.value = 1;
+            }),
+          ),
+          SliverToBoxAdapter(
+            child: _fresh == null
+                ? const SizedBox(height: 120, child: Center(child: CircularProgressIndicator()))
+                : _HorizontalProducts(_fresh!),
+          ),
+        ],
         SliverToBoxAdapter(
           child: SectionTitle('الموردين', onMore: () {
             catalogQuery.value = '';
@@ -914,6 +917,9 @@ class _CatalogScreenState extends State<CatalogScreen> {
     if (_items.isEmpty) {
       if (_list == 'offer') {
         return const EmptyState(icon: Icons.card_giftcard_rounded, title: 'ما في عروض حالياً', sub: 'تابعنا، العروض الجديدة بتنزل هون');
+      }
+      if (_list == 'new') {
+        return const EmptyState(icon: Icons.new_releases_rounded, title: 'ما في أصناف جديدة حالياً', sub: 'الأصناف يلي بتوصل حديثاً بتظهر هون');
       }
       return ListView(children: [
         const SizedBox(height: 20),

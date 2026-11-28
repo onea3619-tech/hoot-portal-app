@@ -22,6 +22,7 @@ class Product {
   final String category;
   final String productType; // Agent / Subagent
   final String label; // offer / list label set by staff in Sales > App
+  final String promo; // marketing text of an offer (Sales > App > Offers)
 
   const Product({
     required this.id,
@@ -37,6 +38,7 @@ class Product {
     this.category = '',
     this.productType = '',
     this.label = '',
+    this.promo = '',
   });
 
   factory Product.fromJson(Map j) => Product(
@@ -53,6 +55,7 @@ class Product {
         category: (j['category'] ?? '').toString(),
         productType: (j['product_type'] ?? '').toString(),
         label: (j['label'] ?? '').toString(),
+        promo: (j['promo'] ?? '').toString().trim(),
       );
 
   String get imageUrl => '${AppConfig.baseUrl}/my/quick_order/image/$id?size=256';

@@ -196,7 +196,12 @@ class ProductCard extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontSize: 11.5, color: HootColors.muted)),
             const Spacer(),
-            if (p.batchExp.isNotEmpty)
+            if (p.promo.isNotEmpty)
+              Text(p.promo,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 11, height: 1.25, fontWeight: FontWeight.w700, color: Color(0xFFE65100)))
+            else if (p.batchExp.isNotEmpty)
               Text('Batch & Exp: ${p.batchExp}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -242,8 +247,14 @@ class ProductRow extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontSize: 11.5, color: HootColors.muted)),
+                if (p.promo.isNotEmpty)
+                  Text(p.promo,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Color(0xFFE65100))),
                 const SizedBox(height: 4),
                 Wrap(spacing: 4, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                  if (p.label.isNotEmpty) Pill(p.label, color: const Color(0xFFE65100), icon: Icons.local_offer_rounded, solid: true),
                   if (p.hot) const Pill('Hot', color: HootColors.hot, icon: Icons.local_fire_department_rounded, solid: true),
                   if (p.bonus.isNotEmpty) Pill('بونص ${p.bonus}', color: HootColors.greenDark),
                   if (p.tax.isNotEmpty) Pill(taxLabel(p), color: HootColors.navy),
@@ -288,6 +299,22 @@ Future<void> showProductSheet(BuildContext context, Product p) {
           Pill(p.hot ? 'Hot Item: نعم' : 'Hot Item: لا', color: p.hot ? HootColors.hot : HootColors.muted),
           Pill(p.bonus.isNotEmpty ? 'بونص ${p.bonus}' : 'بونص: لا يوجد', color: HootColors.greenDark),
         ]),
+        if (p.promo.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: const Color(0xFFFFF3E0), borderRadius: BorderRadius.circular(14)),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Icon(Icons.local_offer_rounded, color: Color(0xFFE65100), size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(p.promo,
+                    style: const TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF8A3A00), height: 1.35)),
+              ),
+            ]),
+          ),
+        ],
         const SizedBox(height: 14),
         _info('المورد', p.vendor),
         _info('Batch & Exp', p.batchExp.isEmpty ? '-' : p.batchExp),
