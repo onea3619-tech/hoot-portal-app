@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'api.dart';
+import 'invoice_detail.dart';
 import 'theme.dart';
 import 'widgets.dart';
 
@@ -42,7 +43,7 @@ class _CardScreenState extends State<CardScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('بطاقتي', style: TextStyle(fontWeight: FontWeight.w900))),
+      appBar: AppBar(title: const HootTitle('بطاقتي', style: TextStyle(fontWeight: FontWeight.w900))),
       body: FutureBuilder(
         future: _f,
         builder: (context, snap) {
@@ -111,6 +112,8 @@ class _DetailsScreenState extends State<DetailsScreen> {
   ];
   final Map<String, TextEditingController> _c = {for (final f in _fields) f.$1: TextEditingController()};
   String _name = '';
+  bool _editable = false;
+  String _closedMsg = '';
   bool _loading = true;
   bool _saving = false;
   bool _error = false;
@@ -132,8 +135,17 @@ class _DetailsScreenState extends State<DetailsScreen> {
   Future<void> _load([Map<String, dynamic>? values]) async {
     try {
       final r = await api.jcall('/hoot_app/details', values == null ? {} : {'values': values});
+      if (r is Map && r['error'] == 'closed') {
+        _editable = false;
+        _closedMsg = (r['message'] ?? '').toString();
+        _error = true;
+        if (mounted) setState(() => _loading = false);
+        return;
+      }
       if (r is Map) {
         _name = (r['name'] ?? '').toString();
+        _editable = r['editable'] == true;
+        _closedMsg = (r['closed_message'] ?? '').toString();
         for (final f in _fields) {
           _c[f.$1]!.text = (r[f.$1] ?? '').toString();
         }
@@ -150,13 +162,13 @@ class _DetailsScreenState extends State<DetailsScreen> {
     await _load({for (final f in _fields) f.$1: _c[f.$1]!.text});
     if (!mounted) return;
     setState(() => _saving = false);
-    _toast(context, _error ? 'ما قدرنا نحفظ' : 'تم حفظ البيانات');
+    _toast(context, _error ? (_closedMsg.isNotEmpty ? _closedMsg : 'ما قدرنا نحفظ') : 'تم حفظ البيانات');
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('بياناتي', style: TextStyle(fontWeight: FontWeight.w900))),
+      appBar: AppBar(title: const HootTitle('بياناتي', style: TextStyle(fontWeight: FontWeight.w900))),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(padding: const EdgeInsets.fromLTRB(16, 4, 16, 24), children: [
@@ -166,16 +178,32 @@ class _DetailsScreenState extends State<DetailsScreen> {
                 Expanded(child: Text(_name, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16))),
               ])),
               const SizedBox(height: 14),
+              if (!_editable)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(color: const Color(0xFFFFF4E5), borderRadius: BorderRadius.circular(14)),
+                  child: Row(children: [
+                    Icon(Icons.lock_clock_rounded, color: Colors.orange.shade800),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(_closedMsg.isEmpty ? 'تعديل البيانات مسكّر حالياً.' : _closedMsg,
+                          style: const TextStyle(fontWeight: FontWeight.w700)),
+                    ),
+                  ]),
+                ),
               for (final f in _fields)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: TextField(
                     controller: _c[f.$1],
+                    readOnly: !_editable,
                     keyboardType: f.$4,
                     decoration: InputDecoration(labelText: f.$2, prefixIcon: Icon(f.$3)),
                   ),
                 ),
               const SizedBox(height: 6),
+              if (_editable)
               FilledButton(
                 onPressed: _saving ? null : _save,
                 child: _saving
@@ -235,7 +263,7 @@ class _PasswordScreenState extends State<PasswordScreen> {
   Widget build(BuildContext context) {
     InputDecoration dec(String l) => InputDecoration(labelText: l, prefixIcon: const Icon(Icons.lock_rounded));
     return Scaffold(
-      appBar: AppBar(title: const Text('الأمان وكلمة السر', style: TextStyle(fontWeight: FontWeight.w900))),
+      appBar: AppBar(title: const HootTitle('الأمان وكلمة السر', style: TextStyle(fontWeight: FontWeight.w900))),
       body: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 24), children: [
         TextField(controller: _old, obscureText: true, decoration: dec('كلمة السر الحالية')),
         const SizedBox(height: 12),
@@ -289,7 +317,7 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('المرتجعات', style: TextStyle(fontWeight: FontWeight.w900))),
+      appBar: AppBar(title: const HootTitle('المرتجعات', style: TextStyle(fontWeight: FontWeight.w900))),
       floatingActionButton: FutureBuilder(
         future: _f,
         builder: (context, snap) => FloatingActionButton.extended(
@@ -349,6 +377,10 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
                           child: Text('سبب الرفض: ${r['reject_reason']}',
                               style: const TextStyle(color: HootColors.danger, fontWeight: FontWeight.w700)),
                         ),
+                      if (((r['invoice_id'] as num?) ?? 0) > 0) ...[
+                        const SizedBox(height: 8),
+                        InvoiceDetailsButton(moveId: (r['invoice_id'] as num).toInt(), label: 'تفاصيل الفاتورة ${r['invoice'] ?? ''}'),
+                      ],
                     ]),
                   ),
                 ),
@@ -442,7 +474,7 @@ class _NewReturnScreenState extends State<NewReturnScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('طلب مرتجع جديد', style: TextStyle(fontWeight: FontWeight.w900))),
+      appBar: AppBar(title: const HootTitle('طلب مرتجع جديد', style: TextStyle(fontWeight: FontWeight.w900))),
       body: Column(children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
@@ -590,7 +622,7 @@ class _TicketsScreenState extends State<TicketsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('الدعم والشكاوى', style: TextStyle(fontWeight: FontWeight.w900))),
+      appBar: AppBar(title: const HootTitle('الدعم والشكاوى', style: TextStyle(fontWeight: FontWeight.w900))),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: HootColors.blue,
         foregroundColor: Colors.white,
@@ -655,7 +687,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('المواعيد', style: TextStyle(fontWeight: FontWeight.w900))),
+      appBar: AppBar(title: const HootTitle('المواعيد', style: TextStyle(fontWeight: FontWeight.w900))),
       body: FutureBuilder(
         future: _f,
         builder: (context, snap) {
@@ -797,7 +829,7 @@ class _BookingScreenState extends State<BookingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.title, style: const TextStyle(fontWeight: FontWeight.w900))),
+      appBar: AppBar(title: HootTitle(widget.title, style: const TextStyle(fontWeight: FontWeight.w900))),
       body: FutureBuilder(
         future: _f,
         builder: (context, snap) {
@@ -988,7 +1020,7 @@ class _RequestedItemsScreenState extends State<RequestedItemsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('أصناف طلبتها', style: TextStyle(fontWeight: FontWeight.w900))),
+      appBar: AppBar(title: const HootTitle('أصناف طلبتها', style: TextStyle(fontWeight: FontWeight.w900))),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: HootColors.blue,
         foregroundColor: Colors.white,
@@ -1080,10 +1112,37 @@ class _RequestedItemsScreenState extends State<RequestedItemsScreen> {
 /// Card inviting the pharmacy to record items it could not find.
 class RequestItemBanner extends StatelessWidget {
   final String initialName;
-  const RequestItemBanner({super.key, this.initialName = ''});
+  final bool compact;
+  const RequestItemBanner({super.key, this.initialName = '', this.compact = false});
 
   @override
   Widget build(BuildContext context) {
+    if (compact) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+        child: Material(
+          color: HootColors.blue.withOpacity(0.07),
+          borderRadius: BorderRadius.circular(14),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: () => Navigator.of(context)
+                .push(MaterialPageRoute(builder: (_) => RequestedItemsScreen(initialName: initialName))),
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+              child: Row(children: [
+                Icon(Icons.manage_search_rounded, color: HootColors.blue, size: 22),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text('$kRequestTitle سجّلها هون',
+                      style: TextStyle(fontWeight: FontWeight.w800, color: HootColors.blue, fontSize: 13.5)),
+                ),
+                Icon(Icons.chevron_left_rounded, color: HootColors.blue),
+              ]),
+            ),
+          ),
+        ),
+      );
+    }
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
       child: Material(

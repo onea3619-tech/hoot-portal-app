@@ -23,6 +23,8 @@ class Product {
   final String productType; // Agent / Subagent
   final String label; // offer / list label set by staff in Sales > App
   final String promo; // marketing text of an offer (Sales > App > Offers)
+  final List<String> bonusSteps; // quantity bonus, e.g. ["10+1", "25+3"]
+  final double bonusDiscount; // discount on the bonus (B.D %)
 
   const Product({
     required this.id,
@@ -39,6 +41,8 @@ class Product {
     this.productType = '',
     this.label = '',
     this.promo = '',
+    this.bonusSteps = const [],
+    this.bonusDiscount = 0,
   });
 
   factory Product.fromJson(Map j) => Product(
@@ -56,6 +60,8 @@ class Product {
         productType: (j['product_type'] ?? '').toString(),
         label: (j['label'] ?? '').toString(),
         promo: (j['promo'] ?? '').toString().trim(),
+        bonusSteps: [for (final s in (j['bonus_steps'] as List? ?? [])) s.toString()],
+        bonusDiscount: j['bonus_discount'] is num ? (j['bonus_discount'] as num).toDouble() : 0,
       );
 
   String get imageUrl => '${AppConfig.baseUrl}/my/quick_order/image/$id?size=256';
@@ -118,7 +124,8 @@ class DocLine {
   final double qty;
   final double price;
   final double subtotal;
-  const DocLine(this.name, this.qty, this.price, this.subtotal);
+  final double bonus;
+  const DocLine(this.name, this.qty, this.price, this.subtotal, [this.bonus = 0]);
 }
 
 DateTime? _date(dynamic v) => v is String ? DateTime.tryParse(v) : null;

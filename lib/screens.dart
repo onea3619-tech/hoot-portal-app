@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'account_screens.dart';
 import 'api.dart';
 import 'data.dart';
+import 'invoice_detail.dart';
 import 'login.dart';
 import 'portal.dart';
 import 'theme.dart';
@@ -90,6 +91,7 @@ class _HomeScreenState extends State<HomeScreen> {
       child: CustomScrollView(slivers: [
         SliverToBoxAdapter(child: _Header()),
         const SliverToBoxAdapter(child: _PricelistBanner()),
+        const SliverToBoxAdapter(child: RequestItemBanner()),
         SliverToBoxAdapter(child: _Offers()),
         const SliverToBoxAdapter(child: _ScanTip()),
         const SliverToBoxAdapter(child: SectionTitle('التصنيفات')),
@@ -137,7 +139,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 )
               : _HorizontalProducts(_hot!),
         ),
-        const SliverToBoxAdapter(child: RequestItemBanner()),
         const SliverToBoxAdapter(child: SizedBox(height: 24)),
       ]),
     );
@@ -156,6 +157,8 @@ class _Header extends StatelessWidget {
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
+          const HootLogo(size: 40),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(api.userName.isEmpty ? 'أهلاً بك 👋' : 'أهلاً ${api.userName} 👋',
@@ -801,6 +804,8 @@ class _CatalogScreenState extends State<CatalogScreen> {
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           child: Row(children: [
+            const HootLogo(size: 34),
+            const SizedBox(width: 8),
             Expanded(
               child: TextField(
                 controller: _ctrl,
@@ -892,6 +897,30 @@ class _CatalogScreenState extends State<CatalogScreen> {
               ],
             ),
           ),
+        ListenableBuilder(
+          listenable: cart,
+          builder: (_, __) => cart.editingOrderId == null
+              ? const SizedBox.shrink()
+              : Container(
+                  margin: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+                  padding: const EdgeInsets.fromLTRB(12, 6, 6, 6),
+                  decoration: BoxDecoration(color: HootColors.blue, borderRadius: BorderRadius.circular(14)),
+                  child: Row(children: [
+                    const Icon(Icons.edit_note_rounded, color: Colors.white),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text('بتضيف أصناف لطلب ${cart.editingOrderName}',
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+                    ),
+                    TextButton(
+                      onPressed: () => tabIndex.value = 2,
+                      style: TextButton.styleFrom(foregroundColor: Colors.white),
+                      child: const Text('رجوع للطلب'),
+                    ),
+                  ]),
+                ),
+        ),
+        const RequestItemBanner(compact: true),
         Padding(
           padding: const EdgeInsets.fromLTRB(18, 6, 18, 6),
           child: Row(children: [
@@ -1055,7 +1084,7 @@ class CartScreen extends StatelessWidget {
         final lines = cart.lines.values.toList();
         return Scaffold(
           appBar: AppBar(
-            title: Text(cart.editingOrderId == null ? 'السلة' : 'تعديل الطلب ${cart.editingOrderName}',
+            title: HootTitle(cart.editingOrderId == null ? 'السلة' : 'تعديل الطلب ${cart.editingOrderName}',
                 style: const TextStyle(fontWeight: FontWeight.w900)),
             actions: [
               if (cart.editingOrderId != null)
@@ -1070,6 +1099,23 @@ class CartScreen extends StatelessWidget {
                   action: FilledButton(onPressed: () => tabIndex.value = 1, child: const Text('تصفّح الأصناف')),
                 )
               : ListView(padding: const EdgeInsets.fromLTRB(16, 4, 16, 140), children: [
+                  if (cart.editingOrderId != null) ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      margin: const EdgeInsets.only(bottom: 10),
+                      decoration: BoxDecoration(color: HootColors.blue.withOpacity(0.07), borderRadius: BorderRadius.circular(16)),
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                        const Text('عدّل الكميات، احذف أصناف، أو ضيف أصناف جديدة، وبعدين اضغط "حفظ التعديل".',
+                            style: TextStyle(fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 8),
+                        FilledButton.icon(
+                          onPressed: () => tabIndex.value = 1,
+                          icon: const Icon(Icons.add_shopping_cart_rounded),
+                          label: const Text('إضافة أصناف للطلب'),
+                        ),
+                      ]),
+                    ),
+                  ],
                   for (final l in lines)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 10),
@@ -1083,7 +1129,14 @@ class CartScreen extends StatelessWidget {
                           decoration: BoxDecoration(color: HootColors.danger, borderRadius: BorderRadius.circular(18)),
                           child: const Icon(Icons.delete_rounded, color: Colors.white),
                         ),
-                        child: ProductRow(l.product),
+                        child: Row(children: [
+                          Expanded(child: ProductRow(l.product)),
+                          IconButton(
+                            tooltip: 'حذف الصنف',
+                            onPressed: () => cart.setQty(l.product, 0),
+                            icon: const Icon(Icons.delete_outline_rounded, color: HootColors.danger),
+                          ),
+                        ]),
                       ),
                     ),
                   const SizedBox(height: 4),
@@ -1308,7 +1361,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
       );
     }
     return Scaffold(
-      appBar: AppBar(title: const Text('طلباتي', style: TextStyle(fontWeight: FontWeight.w900))),
+      appBar: AppBar(title: const HootTitle('طلباتي', style: TextStyle(fontWeight: FontWeight.w900))),
       body: body,
     );
   }
@@ -1407,7 +1460,10 @@ class _LinesView extends StatelessWidget {
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Text(l.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
                       const SizedBox(height: 2),
-                      Text('${_qty(l.qty)} × ${money(l.price)}', style: const TextStyle(color: HootColors.muted, fontSize: 12)),
+                      Row(children: [
+                        Text('${_qty(l.qty)} × ${money(l.price)}', style: const TextStyle(color: HootColors.muted, fontSize: 12)),
+                        if (l.bonus > 0) ...[const SizedBox(width: 6), BonusChip('+${_qty(l.bonus)} بونص')],
+                      ]),
                     ]),
                   ),
                   Text(money(l.subtotal), style: const TextStyle(fontWeight: FontWeight.w900, color: HootColors.navy)),
@@ -1514,7 +1570,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.order.name, style: const TextStyle(fontWeight: FontWeight.w900))),
+      appBar: AppBar(title: HootTitle(widget.order.name, style: const TextStyle(fontWeight: FontWeight.w900))),
       body: FutureBuilder<Map>(
         future: _future,
         builder: (context, snap) {
@@ -1534,8 +1590,10 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           final lines = [
             for (final l in (o['lines'] as List))
               DocLine((l['name'] ?? '').toString(), ((l['qty'] as num?) ?? 0).toDouble(),
-                  ((l['price_unit'] as num?) ?? 0).toDouble(), ((l['subtotal'] as num?) ?? 0).toDouble()),
+                  ((l['price_unit'] as num?) ?? 0).toDouble(), ((l['subtotal'] as num?) ?? 0).toDouble(),
+                  ((l['bonus'] as num?) ?? 0).toDouble()),
           ];
+          final invoices = (o['invoices'] as List? ?? []);
           return Column(children: [
             Expanded(
               child: _LinesView(
@@ -1557,6 +1615,13 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                     Text('قائمة الأسعار: ${o['pricelist'] ?? ''}', style: const TextStyle(color: HootColors.muted)),
                     Text('قبل الضريبة: ${money(((o['amount_untaxed'] as num?) ?? 0).toDouble())}   ·   الضريبة: ${money(((o['amount_tax'] as num?) ?? 0).toDouble())}',
                         style: const TextStyle(color: HootColors.muted, fontSize: 12.5)),
+                    for (final inv in invoices) ...[
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        child: InvoiceDetailsButton(moveId: inv['id'] as int, label: 'تفاصيل الفاتورة ${inv['name']}'),
+                      ),
+                    ],
                   ]),
                 ),
               ),
@@ -1605,7 +1670,7 @@ class SentOrderScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final d = order.date;
     return Scaffold(
-      appBar: AppBar(title: Text('طلب رقم ${order.id}', style: const TextStyle(fontWeight: FontWeight.w900))),
+      appBar: AppBar(title: HootTitle('طلب رقم ${order.id}', style: const TextStyle(fontWeight: FontWeight.w900))),
       body: _LinesView(
         future: Future.value([
           for (final l in order.lines)
@@ -1684,7 +1749,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('كشف الحساب والفواتير', style: TextStyle(fontWeight: FontWeight.w900))),
+      appBar: AppBar(title: const HootTitle('كشف الحساب والفواتير', style: TextStyle(fontWeight: FontWeight.w900))),
       body: FutureBuilder<List<Invoice>>(
         future: _future,
         builder: (context, snap) {
@@ -1788,7 +1853,7 @@ class InvoiceDetailScreen extends StatelessWidget {
     final d = invoice.date;
     final due = invoice.due;
     return Scaffold(
-      appBar: AppBar(title: Text(invoice.name, style: const TextStyle(fontWeight: FontWeight.w900))),
+      appBar: AppBar(title: HootTitle(invoice.name, style: const TextStyle(fontWeight: FontWeight.w900))),
       body: _LinesView(
         future: api.invoiceLines(invoice.id),
         total: money(invoice.total),
@@ -1812,6 +1877,8 @@ class InvoiceDetailScreen extends StatelessWidget {
               Text('المتبقي: ${money(invoice.residual)}',
                   style: const TextStyle(color: HootColors.danger, fontWeight: FontWeight.w800)),
             ],
+            const SizedBox(height: 10),
+            SizedBox(width: double.infinity, child: InvoiceDetailsButton(moveId: invoice.id, label: 'عرض التفاصيل الكاملة')),
           ]),
         ),
       ),
@@ -1827,7 +1894,7 @@ class AccountScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('حسابي', style: TextStyle(fontWeight: FontWeight.w900))),
+      appBar: AppBar(title: const HootTitle('حسابي', style: TextStyle(fontWeight: FontWeight.w900))),
       body: ListView(padding: const EdgeInsets.fromLTRB(16, 4, 16, 24), children: [
         Container(
           padding: const EdgeInsets.all(18),

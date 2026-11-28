@@ -174,10 +174,6 @@ class ProductCard extends StatelessWidget {
                     const SizedBox(height: 4),
                   ],
                   if (p.hot) const Pill('Hot', color: HootColors.hot, icon: Icons.local_fire_department_rounded, solid: true),
-                  if (p.bonus.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Pill('بونص ${p.bonus}', color: HootColors.greenDark),
-                  ],
                   if (p.tax.isNotEmpty) ...[
                     const SizedBox(height: 4),
                     Pill(taxLabel(p), color: HootColors.navy),
@@ -195,6 +191,10 @@ class ProductCard extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontSize: 11.5, color: HootColors.muted)),
+            if (p.bonusSteps.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              BonusSteps(p.bonusSteps, max: 2),
+            ],
             const Spacer(),
             if (p.promo.isNotEmpty)
               Text(p.promo,
@@ -256,7 +256,7 @@ class ProductRow extends StatelessWidget {
                 Wrap(spacing: 4, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
                   if (p.label.isNotEmpty) Pill(p.label, color: const Color(0xFFE65100), icon: Icons.local_offer_rounded, solid: true),
                   if (p.hot) const Pill('Hot', color: HootColors.hot, icon: Icons.local_fire_department_rounded, solid: true),
-                  if (p.bonus.isNotEmpty) Pill('بونص ${p.bonus}', color: HootColors.greenDark),
+                  for (final s in p.bonusSteps) BonusChip(s),
                   if (p.tax.isNotEmpty) Pill(taxLabel(p), color: HootColors.navy),
                   priceText(p, size: 13),
                 ]),
@@ -297,8 +297,17 @@ Future<void> showProductSheet(BuildContext context, Product p) {
         const SizedBox(height: 16),
         Wrap(spacing: 6, runSpacing: 6, children: [
           Pill(p.hot ? 'Hot Item: نعم' : 'Hot Item: لا', color: p.hot ? HootColors.hot : HootColors.muted),
-          Pill(p.bonus.isNotEmpty ? 'بونص ${p.bonus}' : 'بونص: لا يوجد', color: HootColors.greenDark),
+          if (p.bonusSteps.isEmpty) const Pill('بونص كميات: لا يوجد', color: HootColors.muted),
+          if (p.bonusDiscount > 0) Pill('خصم على البونص ${_pct(p.bonusDiscount)}%', color: HootColors.navy),
         ]),
+        if (p.bonusSteps.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          const Text('بونص الكميات', style: TextStyle(fontWeight: FontWeight.w900, color: HootColors.navy)),
+          const SizedBox(height: 6),
+          BonusSteps(p.bonusSteps, big: true),
+          const SizedBox(height: 4),
+          const Text('مثلاً 10+1: لما تطلب 10 بتوصلك علبة بونص', style: TextStyle(color: HootColors.muted, fontSize: 12)),
+        ],
         if (p.promo.isNotEmpty) ...[
           const SizedBox(height: 12),
           Container(
@@ -456,4 +465,86 @@ Future<void> showPricelistSheet(BuildContext context) async {
       ),
     ),
   );
+}
+
+String _pct(double v) => v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(1);
+
+/// Quantity bonus shown as "10+1" (10 boxes ordered, 1 box free).
+class BonusChip extends StatelessWidget {
+  const BonusChip(this.text, {super.key, this.big = false});
+  final String text;
+  final bool big;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: big ? 12 : 8, vertical: big ? 6 : 3),
+      decoration: BoxDecoration(
+        color: HootColors.green.withOpacity(0.16),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: HootColors.greenDark.withOpacity(0.35)),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(Icons.card_giftcard_rounded, size: big ? 16 : 12, color: HootColors.greenDark),
+        const SizedBox(width: 3),
+        Text(text,
+            textDirection: TextDirection.ltr,
+            style: TextStyle(fontWeight: FontWeight.w900, fontSize: big ? 15 : 11.5, color: HootColors.greenDark)),
+      ]),
+    );
+  }
+}
+
+class BonusSteps extends StatelessWidget {
+  const BonusSteps(this.steps, {super.key, this.max = 99, this.big = false});
+  final List<String> steps;
+  final int max;
+  final bool big;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(spacing: 4, runSpacing: 4, children: [for (final s in steps.take(max)) BonusChip(s, big: big)]);
+  }
+}
+
+/// The company logo, used in every page title.
+class HootLogo extends StatelessWidget {
+  const HootLogo({super.key, this.size = 30});
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size + 6,
+      height: size + 6,
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 6)],
+      ),
+      child: Image.asset('assets/icon.png', fit: BoxFit.contain),
+    );
+  }
+}
+
+/// Page title with the logo next to it.
+class HootTitle extends StatelessWidget {
+  const HootTitle(this.text, {super.key, this.style});
+  final String text;
+  final TextStyle? style;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      const HootLogo(size: 26),
+      const SizedBox(width: 10),
+      Flexible(
+        child: Text(text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: style ?? const TextStyle(fontWeight: FontWeight.w900)),
+      ),
+    ]);
+  }
 }
