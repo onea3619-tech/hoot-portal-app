@@ -130,6 +130,9 @@ class QtyControl extends StatelessWidget {
       );
 }
 
+String taxLabel(Product p) =>
+    'ضريبة ${p.taxPercent == p.taxPercent.roundToDouble() ? p.taxPercent.toInt() : p.taxPercent}%';
+
 Widget priceText(Product p, {double size = 15}) => Text(
       p.price == null ? 'السعر بعد اختيار القائمة' : money(p.price!),
       maxLines: 1,
@@ -170,6 +173,10 @@ class ProductCard extends StatelessWidget {
                   if (p.bonus.isNotEmpty) ...[
                     const SizedBox(height: 4),
                     Pill('بونص ${p.bonus}', color: HootColors.greenDark),
+                  ],
+                  if (p.tax.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Pill(taxLabel(p), color: HootColors.navy),
                   ],
                 ]),
               ),
@@ -235,6 +242,7 @@ class ProductRow extends StatelessWidget {
                 Wrap(spacing: 4, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
                   if (p.hot) const Pill('Hot', color: HootColors.hot, icon: Icons.local_fire_department_rounded, solid: true),
                   if (p.bonus.isNotEmpty) Pill('بونص ${p.bonus}', color: HootColors.greenDark),
+                  if (p.tax.isNotEmpty) Pill(taxLabel(p), color: HootColors.navy),
                   priceText(p, size: 13),
                 ]),
               ]),
@@ -278,6 +286,7 @@ Future<void> showProductSheet(BuildContext context, Product p) {
         const SizedBox(height: 14),
         _info('المورد', p.vendor),
         _info('Batch & Exp', p.batchExp.isEmpty ? '-' : p.batchExp),
+        if (p.tax.isNotEmpty) _info('الضريبة', p.tax),
         const SizedBox(height: 16),
         Row(children: [
           Expanded(child: priceText(p, size: 22)),

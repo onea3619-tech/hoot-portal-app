@@ -57,6 +57,10 @@ class CartModel extends ChangeNotifier {
   final Map<int, CartLine> _lines = {};
   int? pricelistId;
   String serverTotal = '';
+
+  /// When set, the cart holds the lines of this quotation being edited.
+  int? editingOrderId;
+  String editingOrderName = '';
   bool sending = false;
   Timer? _debounce;
 
@@ -109,9 +113,56 @@ class CartModel extends ChangeNotifier {
     });
   }
 
+  /// Puts the lines of a quotation in the cart to change them.
+  void startEditing(int orderId, String name, int? orderPricelist, List<CartLine> lines) {
+    _lines
+      ..clear()
+      ..addEntries(lines.map((l) => MapEntry(l.product.id, l)));
+    editingOrderId = orderId;
+    editingOrderName = name;
+    if (orderPricelist != null) pricelistId = orderPricelist;
+    notifyListeners();
+    _refreshTotal();
+  }
+
+  void setPricelistLocal(int id) {
+    pricelistId = id;
+    notifyListeners();
+  }
+
+  void stopEditing() {
+    editingOrderId = null;
+    editingOrderName = '';
+    _lines.clear();
+    serverTotal = '';
+    notifyListeners();
+  }
+
   Future<String> submit() async {
     sending = true;
     notifyListeners();
+    if (editingOrderId != null) {
+      try {
+        final r = await api.jcall('/hoot_app/order/update', {
+          'order_id': editingOrderId,
+          'lines': [for (final l in _lines.values) {'id': l.product.id, 'qty': l.qty}],
+        });
+        if (r is Map && r['ok'] == true) {
+          final url = '/my/orders/$editingOrderId';
+          editingOrderId = null;
+          editingOrderName = '';
+          _lines.clear();
+          serverTotal = '';
+          return url;
+        }
+        throw ApiException(r is Map && r['error'] == 'locked'
+            ? 'الطلب تأكد وما عاد ينفع يتعدّل'
+            : 'ما قدرنا نحفظ التعديل');
+      } finally {
+        sending = false;
+        notifyListeners();
+      }
+    }
     try {
       final url = await api.submit(pricelistId!, {for (final l in _lines.values) l.product.id: l.qty});
       final id = int.tryParse(RegExp(r'/orders/(\d+)').firstMatch(url)?.group(1) ?? '');

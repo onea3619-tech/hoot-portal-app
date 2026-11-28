@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:html/parser.dart' as html_parser;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -18,6 +17,10 @@ class Product {
   final bool available;
   final String batchExp;
   final double? price; // null until a pricelist is chosen
+  final String tax; // e.g. "16%" or "0% O"
+  final double taxPercent;
+  final String category;
+  final String productType; // Agent / Subagent
 
   const Product({
     required this.id,
@@ -28,9 +31,35 @@ class Product {
     required this.available,
     required this.batchExp,
     required this.price,
+    this.tax = '',
+    this.taxPercent = 0,
+    this.category = '',
+    this.productType = '',
   });
 
+  factory Product.fromJson(Map j) => Product(
+        id: j['id'] as int,
+        name: (j['name'] ?? '').toString().trim(),
+        vendor: OdooApi._cleanVendor((j['vendor'] ?? '').toString()),
+        hot: j['hot'] == true,
+        bonus: (j['bonus'] ?? '').toString(),
+        available: true,
+        batchExp: (j['batch_exp'] ?? '').toString(),
+        price: j['price'] is num ? (j['price'] as num).toDouble() : null,
+        tax: (j['tax'] ?? '').toString(),
+        taxPercent: j['tax_percent'] is num ? (j['tax_percent'] as num).toDouble() : 0,
+        category: (j['category'] ?? '').toString(),
+        productType: (j['product_type'] ?? '').toString(),
+      );
+
   String get imageUrl => '${AppConfig.baseUrl}/my/quick_order/image/$id?size=256';
+}
+
+class AppCategory {
+  final String key;
+  final String label;
+  final int count;
+  const AppCategory(this.key, this.label, this.count);
 }
 
 class Vendor {
@@ -111,6 +140,11 @@ class OdooApi {
   String userName = '';
   List<Pricelist> pricelists = [];
   List<Vendor> vendors = [];
+  List<AppCategory> categories = [];
+  int? selectedPricelist;
+
+  /// Generic JSON call to an Odoo route with the pharmacy's session.
+  Future<dynamic> jcall(String path, [Map<String, dynamic> params = const {}]) => _rpc(path, params);
 
   Uri _u(String path) => Uri.parse('${AppConfig.baseUrl}$path');
 
@@ -242,19 +276,17 @@ class OdooApi {
     }
     _csrf = RegExp(r'csrf_token\s*:\s*"([^"]+)"').firstMatch(body)?.group(1) ??
         RegExp(r'name="csrf_token"\s+value="([^"]+)"').firstMatch(body)?.group(1);
-    final doc = html_parser.parse(body);
-    pricelists = [
-      for (final e in doc.querySelectorAll('.o_fq_pricelist'))
-        if (int.tryParse(e.attributes['data-id'] ?? '') != null)
-          Pricelist(int.parse(e.attributes['data-id']!), e.text.trim()),
-    ];
-    final seen = <int>{};
-    vendors = [
-      for (final e in doc.querySelectorAll('.o_fq_vendor'))
-        if ((int.tryParse(e.attributes['data-id'] ?? '') ?? 0) > 0 &&
-            seen.add(int.parse(e.attributes['data-id']!)))
-          Vendor(int.parse(e.attributes['data-id']!), _cleanVendor(e.text)),
-    ];
+    final meta = await _rpc('/hoot_app/meta', {});
+    if (meta is Map) {
+      userName = (meta['user_name'] ?? userName).toString();
+      pricelists = [for (final p in (meta['pricelists'] as List? ?? [])) Pricelist(p['id'] as int, (p['name'] ?? '').toString())];
+      vendors = [for (final v in (meta['vendors'] as List? ?? [])) Vendor(v['id'] as int, _cleanVendor((v['name'] ?? '').toString()))];
+      categories = [
+        for (final c in (meta['categories'] as List? ?? []))
+          AppCategory((c['key'] ?? '').toString(), (c['label'] ?? '').toString(), (c['count'] as num?)?.toInt() ?? 0)
+      ];
+      selectedPricelist = meta['selected_pricelist'] is int ? meta['selected_pricelist'] as int : null;
+    }
   }
 
   static String _cleanVendor(String s) => s.replaceAll('*', '').replaceAll(RegExp(r'\s+'), ' ').trim();
@@ -264,59 +296,21 @@ class OdooApi {
     if (r is Map && r['error'] != null) throw ApiException('ما قدرنا نختار قائمة الأسعار');
   }
 
-  Future<CardsPage> cards({String search = '', int vendorId = 0, bool hot = false, int offset = 0}) async {
-    final params = <String, dynamic>{'search': search, 'offset': offset};
+  Future<CardsPage> cards(
+      {String search = '', int vendorId = 0, bool hot = false, String category = '', bool fresh = false, int offset = 0, int limit = 20}) async {
+    final params = <String, dynamic>{'search': search, 'offset': offset, 'limit': limit};
     if (vendorId > 0) params['vendor_id'] = vendorId;
     if (hot) params['hot'] = true;
-    final r = await _rpc('/my/quick_order/cards', params);
+    if (category.isNotEmpty) params['category'] = category;
+    if (fresh) params['new'] = true;
+    final r = await _rpc('/hoot_app/cards', params);
     if (r is! Map) return const CardsPage([], 0, false, false);
     return CardsPage(
-      _parseCards((r['html'] ?? '').toString()),
+      [for (final j in (r['items'] as List? ?? [])) Product.fromJson(j as Map)],
       (r['count'] as num?)?.toInt() ?? 0,
       r['has_more'] == true,
       r['has_pricelist'] == true,
     );
-  }
-
-  List<Product> _parseCards(String html) {
-    final doc = html_parser.parse(html);
-    final out = <Product>[];
-    for (final card in doc.querySelectorAll('.o_fq_card')) {
-      final id = int.tryParse(card.attributes['data-id'] ?? '');
-      if (id == null) continue;
-      final name = card.querySelector('.o_fq_name')?.text.trim() ?? '';
-      final smalls = card.querySelectorAll('.o_fq_info > div.small');
-      final vendor = smalls.isNotEmpty ? _cleanVendor(smalls.first.text) : '';
-      var batch = smalls.length > 1 ? smalls.last.text.trim() : '';
-      final colon = batch.indexOf(':');
-      if (colon >= 0) batch = batch.substring(colon + 1).trim();
-      var hot = false, available = false;
-      var bonus = '';
-      for (final b in card.querySelectorAll('.badge')) {
-        final text = b.text.trim();
-        final cls = b.className;
-        if (b.querySelector('.fa-fire') != null || text.contains('Hot')) {
-          hot = cls.contains('text-bg-warning') || text.contains('Yes') || text.contains('نعم');
-        } else if (cls.contains('text-bg-success')) {
-          available = true;
-        } else if (cls.contains('text-bg-info')) {
-          final i = text.indexOf(':');
-          bonus = i >= 0 ? text.substring(i + 1).trim() : text;
-        }
-      }
-      final priceText = card.querySelector('.oe_currency_value')?.text.replaceAll(',', '').trim();
-      out.add(Product(
-        id: id,
-        name: name,
-        vendor: vendor,
-        hot: hot,
-        bonus: bonus,
-        available: available,
-        batchExp: batch,
-        price: priceText == null ? null : double.tryParse(priceText),
-      ));
-    }
-    return out;
   }
 
   /// Server-side check of the cart: returns the formatted total.

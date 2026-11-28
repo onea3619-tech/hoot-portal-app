@@ -5,6 +5,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'account_screens.dart';
 import 'api.dart';
 import 'data.dart';
 import 'login.dart';
@@ -68,7 +69,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final page = await api.cards(hot: true);
       // "وصل حديثاً" is a placeholder for now: a slice of the catalog until
       // Odoo marks newly received products.
-      final fresh = await api.cards(offset: 40);
+      final fresh = await api.cards(fresh: true);
       if (mounted) setState(() {
         _hot = page.items;
         _fresh = fresh.items.take(10).toList();
@@ -92,7 +93,9 @@ class _HomeScreenState extends State<HomeScreen> {
         SliverToBoxAdapter(child: _Offers()),
         const SliverToBoxAdapter(child: _ScanTip()),
         const SliverToBoxAdapter(child: SectionTitle('التصنيفات')),
-        const SliverToBoxAdapter(child: _CategoryStrip()),
+        SliverToBoxAdapter(
+          child: ValueListenableBuilder<int>(valueListenable: metaVersion, builder: (_, __, ___) => const _CategoryStrip()),
+        ),
         const SliverToBoxAdapter(child: SectionTitle('وصل حديثاً ✨')),
         SliverToBoxAdapter(
           child: _fresh == null
@@ -414,6 +417,17 @@ String categoryLabel(String key) {
 class _CategoryStrip extends StatelessWidget {
   const _CategoryStrip();
 
+  /// Categories from Odoo (with products available), drawn with their icon.
+  List<(String, String, IconData, Color)> get _cats {
+    if (api.categories.isEmpty) return appCategories;
+    return [
+      for (final c in api.categories)
+        if (c.count > 0)
+          for (final a in appCategories)
+            if (a.$1 == c.key) (c.key, c.label, a.$3, a.$4),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     return SizedBox(
@@ -421,10 +435,10 @@ class _CategoryStrip extends StatelessWidget {
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(horizontal: 16),
         scrollDirection: Axis.horizontal,
-        itemCount: appCategories.length,
+        itemCount: _cats.length,
         separatorBuilder: (_, __) => const SizedBox(width: 12),
         itemBuilder: (_, i) {
-          final (key, label, icon, color) = appCategories[i];
+          final (key, label, icon, color) = _cats[i];
           return FadeIn(
             index: i,
             child: InkWell(
@@ -603,8 +617,12 @@ class _CatalogScreenState extends State<CatalogScreen> {
     final q = catalogQuery.value;
     if (q.isEmpty) return;
     if (q.startsWith('cat:')) {
-      setState(() => _category = q.substring(4));
+      _category = q.substring(4);
+      _vendorId = 0;
+      _hot = false;
+      _ctrl.clear();
       catalogQuery.value = '';
+      _reload();
       return;
     }
     if (q == '#hot') {
@@ -633,7 +651,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
       _items.clear();
     });
     try {
-      final page = await api.cards(search: _ctrl.text.trim(), vendorId: _vendorId, hot: _hot);
+      final page = await api.cards(search: _ctrl.text.trim(), vendorId: _vendorId, hot: _hot, category: _category);
       if (!mounted || id != _reqId) return;
       setState(() {
         _items.addAll(page.items);
@@ -656,7 +674,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
     final id = _reqId;
     setState(() => _loading = true);
     try {
-      final page = await api.cards(search: _ctrl.text.trim(), vendorId: _vendorId, hot: _hot, offset: _items.length);
+      final page = await api.cards(search: _ctrl.text.trim(), vendorId: _vendorId, hot: _hot, category: _category, offset: _items.length);
       if (!mounted || id != _reqId) return;
       setState(() {
         _items.addAll(page.items);
@@ -672,6 +690,37 @@ class _CatalogScreenState extends State<CatalogScreen> {
     setState(() {});
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 400), _reload);
+  }
+
+  Future<void> _pickCategory() async {
+    final cats = api.categories.where((c) => c.count > 0).toList();
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+      builder: (ctx) => SafeArea(
+        child: ListView(shrinkWrap: true, padding: const EdgeInsets.fromLTRB(8, 16, 8, 16), children: [
+          const Center(child: Text('اختر التصنيف', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900))),
+          const SizedBox(height: 8),
+          ListTile(
+            leading: const Icon(Icons.apps_rounded, color: HootColors.blue),
+            title: const Text('كل التصنيفات', style: TextStyle(fontWeight: FontWeight.w800)),
+            trailing: _category.isEmpty ? const Icon(Icons.check_rounded, color: HootColors.blue) : null,
+            onTap: () => Navigator.pop(ctx, ''),
+          ),
+          for (final c in cats)
+            ListTile(
+              title: Text(c.label),
+              subtitle: Text('${c.count} صنف'),
+              trailing: _category == c.key ? const Icon(Icons.check_rounded, color: HootColors.blue) : null,
+              onTap: () => Navigator.pop(ctx, c.key),
+            ),
+        ]),
+      ),
+    );
+    if (picked == null) return;
+    _category = picked;
+    _reload();
   }
 
   Future<void> _pickVendor() async {
@@ -753,10 +802,10 @@ class _CatalogScreenState extends State<CatalogScreen> {
                 _hot = !_hot;
                 _reload();
               }),
+              _chip('📂 ${_category.isEmpty ? 'التصنيف' : categoryLabel(_category)}', _category.isNotEmpty, _pickCategory,
+                  color: HootColors.greenDark),
               _chip('🏢 $_vendorLabel', _vendorId != 0, _pickVendor),
-              if (_category.isNotEmpty)
-                _chip('✕ ${categoryLabel(_category)}', true, () => setState(() => _category = ''),
-                    color: HootColors.greenDark),
+
               if (_vendorId != 0)
                 _chip('✕ إلغاء المورد', false, () {
                   _vendorId = 0;
@@ -792,16 +841,6 @@ class _CatalogScreenState extends State<CatalogScreen> {
                     ),
                   ),
               ],
-            ),
-          ),
-        if (_category.isNotEmpty)
-          Container(
-            margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(color: HootColors.green.withOpacity(0.14), borderRadius: BorderRadius.circular(14)),
-            child: Text(
-              'تصنيف "${categoryLabel(_category)}" معبّى على الأصناف بأودو، وفلترته هون بتشتغل بعد تحديث بسيط على الخادم. حالياً بتظهر كل الأصناف.',
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
             ),
           ),
         Padding(
@@ -956,7 +995,14 @@ class CartScreen extends StatelessWidget {
       builder: (context, _) {
         final lines = cart.lines.values.toList();
         return Scaffold(
-          appBar: AppBar(title: const Text('السلة', style: TextStyle(fontWeight: FontWeight.w900))),
+          appBar: AppBar(
+            title: Text(cart.editingOrderId == null ? 'السلة' : 'تعديل الطلب ${cart.editingOrderName}',
+                style: const TextStyle(fontWeight: FontWeight.w900)),
+            actions: [
+              if (cart.editingOrderId != null)
+                TextButton(onPressed: cart.stopEditing, child: const Text('إلغاء التعديل')),
+            ],
+          ),
           body: lines.isEmpty
               ? EmptyState(
                   icon: Icons.shopping_cart_outlined,
@@ -1036,15 +1082,18 @@ class _CheckoutBar extends StatelessWidget {
           icon: cart.sending
               ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
               : const Icon(Icons.send_rounded),
-          label: Text(cart.pricelistId == null ? 'اختر قائمة الأسعار' : 'إرسال الطلب'),
+          label: Text(cart.pricelistId == null
+              ? 'اختر قائمة الأسعار'
+              : (cart.editingOrderId != null ? 'حفظ التعديل' : 'إرسال الطلب')),
         ),
       ]),
     );
   }
 
   Future<void> _submit(BuildContext context) async {
+    final editing = cart.editingOrderId != null;
     try {
-      final url = await cart.submit();
+      await cart.submit();
       ordersVersion.value++;
       if (!context.mounted) return;
       await showDialog(
@@ -1066,7 +1115,8 @@ class _CheckoutBar extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 16),
-              const Text('تم إرسال طلبك', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900)),
+              Text(editing ? 'تم حفظ التعديل' : 'تم إرسال طلبك',
+                  style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900)),
               const SizedBox(height: 4),
               const Text('بنبلّشه بأسرع وقت', style: TextStyle(color: HootColors.muted)),
               const SizedBox(height: 18),
@@ -1080,14 +1130,7 @@ class _CheckoutBar extends StatelessWidget {
                   child: const Text('متابعة الطلب'),
                 ),
               ),
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  final path = Uri.tryParse(url)?.path ?? '/my/orders';
-                  openPortal(context, 'تفاصيل الطلب', path);
-                },
-                child: const Text('عرض تفاصيل الطلب'),
-              ),
+
             ]),
           ),
         ),
@@ -1328,32 +1371,167 @@ class _LinesView extends StatelessWidget {
   static String _qty(double q) => q == q.roundToDouble() ? q.toInt().toString() : q.toStringAsFixed(2);
 }
 
-class OrderDetailScreen extends StatelessWidget {
+class OrderDetailScreen extends StatefulWidget {
   const OrderDetailScreen({super.key, required this.order});
   final PortalOrder order;
 
   @override
-  Widget build(BuildContext context) {
-    final step = _OrdersScreenState._stepOf(order);
-    final cancelled = step < 0;
-    final d = order.date?.toLocal();
-    return Scaffold(
-      appBar: AppBar(title: Text(order.name, style: const TextStyle(fontWeight: FontWeight.w900))),
-      body: _LinesView(
-        future: api.orderLines(order.id),
-        total: money(order.total),
-        header: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18)),
-          child: Row(children: [
-            Expanded(
-              child: Text(d == null ? '' : 'تاريخ الطلب: ${d.day}/${d.month}/${d.year}',
-                  style: const TextStyle(fontWeight: FontWeight.w700)),
-            ),
-            Pill(cancelled ? 'ملغي' : _steps[step],
-                color: cancelled ? HootColors.danger : _stepColors[step], solid: true),
-          ]),
+  State<OrderDetailScreen> createState() => _OrderDetailScreenState();
+}
+
+class _OrderDetailScreenState extends State<OrderDetailScreen> {
+  late Future<Map> _future = _load();
+  bool _busy = false;
+
+  Future<Map> _load() async {
+    final r = await api.jcall('/hoot_app/order', {'order_id': widget.order.id});
+    if (r is! Map || r['error'] != null) throw ApiException('ما قدرنا نجيب الطلب');
+    return r;
+  }
+
+  int _step(Map o) {
+    final st = o['state'];
+    if (st == 'cancel') return -1;
+    if (st == 'draft' || st == 'sent') return 0;
+    if (o['invoiced'] == true) return 2;
+    return 1;
+  }
+
+  void _edit(Map o) {
+    final lines = <CartLine>[
+      for (final l in (o['lines'] as List))
+        CartLine(
+          Product(
+            id: l['product_id'] as int,
+            name: (l['name'] ?? '').toString(),
+            vendor: '',
+            hot: false,
+            bonus: '',
+            available: true,
+            batchExp: '',
+            price: (l['price_unit'] as num?)?.toDouble(),
+          ),
+          ((l['qty'] as num?) ?? 0).round(),
         ),
+    ];
+    cart.startEditing(o['id'] as int, (o['name'] ?? '').toString(), o['pricelist_id'] as int?, lines);
+    Navigator.of(context).popUntil((r) => r.isFirst);
+    tabIndex.value = 2;
+  }
+
+  Future<void> _cancel(Map o) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('إلغاء الطلب'),
+        content: Text('أكيد بدك تلغي الطلب ${o['name']}؟'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('لا')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: HootColors.danger),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('نعم، ألغِ الطلب'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    setState(() => _busy = true);
+    try {
+      final r = await api.jcall('/hoot_app/order/cancel', {'order_id': o['id']});
+      if (r is Map && r['ok'] == true) {
+        ordersVersion.value++;
+        setState(() => _future = _load());
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الطلب تأكد وما عاد ينفع يتلغى')));
+      }
+    } catch (e) {
+      if (mounted) handleError(context, e);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(widget.order.name, style: const TextStyle(fontWeight: FontWeight.w900))),
+      body: FutureBuilder<Map>(
+        future: _future,
+        builder: (context, snap) {
+          if (snap.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
+          if (snap.hasError) {
+            return EmptyState(
+              icon: Icons.cloud_off_rounded,
+              title: 'ما قدرنا نجيب الطلب',
+              sub: 'تأكد من الإنترنت وحاول مرة ثانية',
+              action: FilledButton(onPressed: () => setState(() => _future = _load()), child: const Text('إعادة المحاولة')),
+            );
+          }
+          final o = snap.data!;
+          final step = _step(o);
+          final cancelled = step < 0;
+          final d = DateTime.tryParse('${o['date']}Z')?.toLocal();
+          final lines = [
+            for (final l in (o['lines'] as List))
+              DocLine((l['name'] ?? '').toString(), ((l['qty'] as num?) ?? 0).toDouble(),
+                  ((l['price_unit'] as num?) ?? 0).toDouble(), ((l['subtotal'] as num?) ?? 0).toDouble()),
+          ];
+          return Column(children: [
+            Expanded(
+              child: _LinesView(
+                future: Future.value(lines),
+                total: money(((o['amount_total'] as num?) ?? 0).toDouble()),
+                header: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18)),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Row(children: [
+                      Expanded(
+                        child: Text(d == null ? '' : 'تاريخ الطلب: ${d.day}/${d.month}/${d.year}',
+                            style: const TextStyle(fontWeight: FontWeight.w700)),
+                      ),
+                      Pill(cancelled ? 'ملغي' : _steps[step],
+                          color: cancelled ? HootColors.danger : _stepColors[step], solid: true),
+                    ]),
+                    const SizedBox(height: 6),
+                    Text('قائمة الأسعار: ${o['pricelist'] ?? ''}', style: const TextStyle(color: HootColors.muted)),
+                    Text('قبل الضريبة: ${money(((o['amount_untaxed'] as num?) ?? 0).toDouble())}   ·   الضريبة: ${money(((o['amount_tax'] as num?) ?? 0).toDouble())}',
+                        style: const TextStyle(color: HootColors.muted, fontSize: 12.5)),
+                  ]),
+                ),
+              ),
+            ),
+            if (o['editable'] == true)
+              SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                  child: Row(children: [
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: _busy ? null : () => _edit(o),
+                        icon: const Icon(Icons.edit_rounded),
+                        label: const Text('تعديل الطلب'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: HootColors.danger,
+                        side: const BorderSide(color: HootColors.danger),
+                        padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      ),
+                      onPressed: _busy ? null : () => _cancel(o),
+                      icon: const Icon(Icons.close_rounded),
+                      label: const Text('إلغاء'),
+                    ),
+                  ]),
+                ),
+              ),
+          ]);
+        },
       ),
     );
   }
@@ -1612,22 +1790,12 @@ class AccountScreen extends StatelessWidget {
         _tile(Icons.account_balance_wallet_rounded, 'كشف الحساب والفواتير', 'الرصيد المستحق وكل الفواتير',
             () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const InvoicesScreen()))),
         _tile(Icons.shopping_bag_rounded, 'طلباتي', 'حالة كل طلب وأصنافه', () => tabIndex.value = 3),
-        _tile(Icons.assignment_return_rounded, 'المرتجعات', 'طلبات المرتجع وطلب مرتجع جديد',
-            () => openPortal(context, 'المرتجعات', '/my/returns')),
-        _tile(Icons.badge_rounded, 'بطاقتي', 'بيانات الصيدلية وقائمة الأسعار والمنطقة',
-            () => openPortal(context, 'بطاقتي', '/my/card')),
-        _tile(Icons.event_available_rounded, 'حجز زيارة مندوب', 'اختر اليوم والوقت المناسب',
-            () => openPortal(context, 'حجز زيارة مندوب', '/appointment/1')),
-        _tile(Icons.medical_services_rounded, 'حجز يوم طبي', 'يوم طبي مع مستودع أدوية الحوت',
-            () => openPortal(context, 'حجز يوم طبي', '/appointment/2')),
-        _tile(Icons.calendar_month_rounded, 'مواعيدي', 'الزيارات والأيام الطبية المحجوزة',
-            () => openPortal(context, 'مواعيدي', '/my/appointments')),
-        _tile(Icons.support_agent_rounded, 'الدعم والشكاوى', 'تذاكر الدعم ومتابعتها',
-            () => openPortal(context, 'الدعم والشكاوى', '/my/tickets')),
-        _tile(Icons.manage_accounts_rounded, 'بياناتي', 'تعديل بيانات الحساب',
-            () => openPortal(context, 'بياناتي', '/my/account')),
-        _tile(Icons.lock_rounded, 'الأمان وكلمة السر', 'تغيير كلمة السر',
-            () => openPortal(context, 'الأمان وكلمة السر', '/my/security')),
+        _tile(Icons.assignment_return_rounded, 'المرتجعات', 'طلبات المرتجع وطلب مرتجع جديد', () => _go(context, const ReturnsScreen())),
+        _tile(Icons.badge_rounded, 'بطاقتي', 'بيانات الصيدلية وقائمة الأسعار والمنطقة', () => _go(context, const CardScreen())),
+        _tile(Icons.event_available_rounded, 'المواعيد', 'حجز زيارة مندوب أو يوم طبي، ومواعيدي', () => _go(context, const AppointmentsScreen())),
+        _tile(Icons.support_agent_rounded, 'الدعم والشكاوى', 'طلبات الدعم ومتابعتها', () => _go(context, const TicketsScreen())),
+        _tile(Icons.manage_accounts_rounded, 'بياناتي', 'الهاتف والإيميل والعنوان', () => _go(context, const DetailsScreen())),
+        _tile(Icons.lock_rounded, 'الأمان وكلمة السر', 'تغيير كلمة السر', () => _go(context, const PasswordScreen())),
         const SizedBox(height: 8),
         const Padding(
           padding: EdgeInsets.fromLTRB(4, 0, 4, 8),
@@ -1663,6 +1831,8 @@ class AccountScreen extends StatelessWidget {
       ]),
     );
   }
+
+  void _go(BuildContext context, Widget page) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => page));
 
   Widget _contactBtn(Widget icon, String title, String sub, Color color, VoidCallback onTap) => Material(
         color: Colors.white,

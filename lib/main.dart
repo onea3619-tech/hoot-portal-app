@@ -72,7 +72,9 @@ class _ShellState extends State<Shell> {
       await api.loadQuickOrderMeta();
       final p = await SharedPreferences.getInstance();
       final saved = p.getInt('pricelist_id');
-      if (saved != null && api.pricelists.any((e) => e.id == saved)) {
+      if (api.selectedPricelist != null) {
+        cart.setPricelistLocal(api.selectedPricelist!);
+      } else if (saved != null && api.pricelists.any((e) => e.id == saved)) {
         await cart.choosePricelist(saved);
       }
       metaVersion.value++;
