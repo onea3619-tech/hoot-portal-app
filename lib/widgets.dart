@@ -191,9 +191,9 @@ class ProductCard extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontSize: 11.5, color: HootColors.muted)),
-            if (p.bonusSteps.isNotEmpty) ...[
+            if (p.bonusSteps.isNotEmpty || p.bonusDiscount > 0) ...[
               const SizedBox(height: 6),
-              BonusSteps(p.bonusSteps, max: 2),
+              BonusInfo(p, max: 2),
             ],
             const Spacer(),
             if (p.promo.isNotEmpty)
@@ -257,6 +257,7 @@ class ProductRow extends StatelessWidget {
                   if (p.label.isNotEmpty) Pill(p.label, color: const Color(0xFFE65100), icon: Icons.local_offer_rounded, solid: true),
                   if (p.hot) const Pill('Hot', color: HootColors.hot, icon: Icons.local_fire_department_rounded, solid: true),
                   for (final s in p.bonusSteps) BonusChip(s),
+                  if (p.bonusDiscount > 0) BonusDiscountChip(p.bonusDiscount),
                   if (p.tax.isNotEmpty) Pill(taxLabel(p), color: HootColors.navy),
                   priceText(p, size: 13),
                 ]),
@@ -298,7 +299,7 @@ Future<void> showProductSheet(BuildContext context, Product p) {
         Wrap(spacing: 6, runSpacing: 6, children: [
           Pill(p.hot ? 'Hot Item: نعم' : 'Hot Item: لا', color: p.hot ? HootColors.hot : HootColors.muted),
           if (p.bonusSteps.isEmpty) const Pill('بونص كميات: لا يوجد', color: HootColors.muted),
-          if (p.bonusDiscount > 0) Pill('خصم على البونص ${_pct(p.bonusDiscount)}%', color: HootColors.navy),
+          if (p.bonusDiscount > 0) BonusDiscountChip(p.bonusDiscount, big: true),
         ]),
         if (p.bonusSteps.isNotEmpty) ...[
           const SizedBox(height: 12),
@@ -492,6 +493,42 @@ class BonusChip extends StatelessWidget {
             style: TextStyle(fontWeight: FontWeight.w900, fontSize: big ? 15 : 11.5, color: HootColors.greenDark)),
       ]),
     );
+  }
+}
+
+/// Discount on the bonus (B.D %).
+class BonusDiscountChip extends StatelessWidget {
+  const BonusDiscountChip(this.value, {super.key, this.big = false});
+  final double value;
+  final bool big;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: big ? 12 : 8, vertical: big ? 6 : 3),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF3E0),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE65100).withOpacity(0.35)),
+      ),
+      child: Text('خصم بونص ${_pct(value)}%',
+          style: TextStyle(fontWeight: FontWeight.w900, fontSize: big ? 14 : 11, color: const Color(0xFFB34700))),
+    );
+  }
+}
+
+/// Quantity bonus steps + bonus discount, as shown on the product card.
+class BonusInfo extends StatelessWidget {
+  const BonusInfo(this.p, {super.key, this.max = 99});
+  final Product p;
+  final int max;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(spacing: 4, runSpacing: 4, children: [
+      for (final s in p.bonusSteps.take(max)) BonusChip(s),
+      if (p.bonusDiscount > 0) BonusDiscountChip(p.bonusDiscount),
+    ]);
   }
 }
 
